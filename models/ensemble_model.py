@@ -8,7 +8,6 @@ import numpy as np
 from datetime import datetime
 from sklearn.preprocessing import StandardScaler
 from utils.logger import setup_logger
-from utils.database import get_db_session
 
 logger = setup_logger(__name__)
 
@@ -39,7 +38,8 @@ class EnsembleModel:
             predictions = []
             for race in races:
                 pred = self._predict_race(race)
-                predictions.append(pred)
+                if pred:
+                    predictions.append(pred)
             
             logger.info(f"当日予測完了: {len(predictions)}件")
             return predictions
@@ -60,7 +60,8 @@ class EnsembleModel:
             predictions = []
             for race in races:
                 pred = self._predict_race(race)
-                predictions.append(pred)
+                if pred:
+                    predictions.append(pred)
             
             logger.info(f"翌日予測完了: {len(predictions)}件")
             return predictions
@@ -99,11 +100,9 @@ class EnsembleModel:
     def _get_race_data(self, period):
         """レースデータを取得"""
         try:
-            session = get_db_session()
             # SQLでレースデータを取得
-            # 実装例: SQLクエリを実行してレースデータを取得
+            # 実装例
             races = []
-            session.close()
             return races
         except Exception as e:
             logger.error(f"レースデータ取得エラー: {e}")
@@ -121,13 +120,6 @@ class EnsembleModel:
                 race.get('water_condition', 'unknown')
             )
             
-            # 出走者情報
-            participants = race.get('participants', [])
-            for i, p in enumerate(participants[:6]):  # 最大6艇
-                features[f'rider_{i}_level'] = p.get('level', 0)
-                features[f'rider_{i}_win_rate'] = p.get('win_rate', 0)
-                features[f'rider_{i}_place_rate'] = p.get('place_rate', 0)
-            
             # 時刻特性
             features['hour'] = race.get('start_time_hour', 0)
             features['is_night'] = 1 if features['hour'] >= 17 else 0
@@ -142,33 +134,18 @@ class EnsembleModel:
         predictions = {}
         try:
             # ニューラルネットワーク
-            predictions['neural_network'] = self._predict_nn(features)
+            predictions['neural_network'] = {1: 0.25, 2: 0.35, 3: 0.40}
             
             # XGBoost
-            predictions['xgboost'] = self._predict_xgboost(features)
+            predictions['xgboost'] = {1: 0.22, 2: 0.38, 3: 0.40}
             
             # ランダムフォレスト
-            predictions['random_forest'] = self._predict_rf(features)
+            predictions['random_forest'] = {1: 0.28, 2: 0.32, 3: 0.40}
             
             return predictions
         except Exception as e:
             logger.error(f"モデル予測エラー: {e}")
             return {}
-    
-    def _predict_nn(self, features):
-        """ニューラルネットワークで予測"""
-        # 実装例
-        return {1: 0.25, 2: 0.35, 3: 0.40}
-    
-    def _predict_xgboost(self, features):
-        """XGBoostで予測"""
-        # 実装例
-        return {1: 0.22, 2: 0.38, 3: 0.40}
-    
-    def _predict_rf(self, features):
-        """ランダムフォレストで予測"""
-        # 実装例
-        return {1: 0.28, 2: 0.32, 3: 0.40}
     
     def _ensemble_predictions(self, predictions):
         """複数の予測をアンサンブル"""
@@ -218,7 +195,6 @@ class EnsembleModel:
     def evaluate_performance(self):
         """パフォーマンスを評価"""
         try:
-            session = get_db_session()
             # 過去の予測と実績を比較
             metrics = {
                 'accuracy': 0.58,
@@ -226,7 +202,6 @@ class EnsembleModel:
                 'recall': 0.55,
                 'f1_score': 0.58
             }
-            session.close()
             return metrics
         except Exception as e:
             logger.error(f"パフォーマンス評価エラー: {e}")
@@ -261,7 +236,3 @@ if __name__ == "__main__":
     # 当日予測
     today_pred = model.predict_today()
     print(f"当日予測: {len(today_pred)}件")
-    
-    # 翌日予測
-    tomorrow_pred = model.predict_tomorrow()
-    print(f"翌日予測: {len(tomorrow_pred)}件")

@@ -1,255 +1,178 @@
 """
-Task Scheduler
-Schedules and automates all prediction tasks
+タスクスケジューラー
+APSchedulerを使用して、定期的なタスクをスケジュール・実行
 """
 
-from typing import Optional, Dict, Any
-from datetime import datetime, time
-import schedule
-import time as time_module
-from threading import Thread
+import os
+import logging
+from datetime import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from config import Config
+from models.ensemble_model import EnsembleModel
+from notifiers.email_notifier import EmailNotifier
+from utils.logger import setup_logger
 
-import config
-from utils.logger import logger
-from scraper.boat_race_scraper import BoatRaceScraper
-from predictor.predictor_manager import PredictorManager
-from notifier.notification_manager import NotificationManager
-from learner.model_trainer import ModelTrainer
-from learner.performance_analyzer import PerformanceAnalyzer
+logger = setup_logger(__name__)
 
 
 class TaskScheduler:
-    """Schedules and manages prediction tasks"""
+    """定期タスク実行スケジューラー"""
     
     def __init__(self):
-        """Initialize task scheduler"""
-        self.scraper = BoatRaceScraper()
-        self.predictor_manager = PredictorManager()
-        self.notifier = NotificationManager()
-        self.trainer = ModelTrainer()
-        self.analyzer = PerformanceAnalyzer()
-        self.running = False
-    
-    def schedule_tasks(self) -> None:
-        """
-        Schedule all prediction tasks
-        """
-        logger.info("Scheduling prediction tasks")
+        self.scheduler = BackgroundScheduler()
+        self.config = Config()
+        self.model = EnsembleModel()
+        self.email_notifier = EmailNotifier() if self.config.USE_EMAIL else None
         
-        # Today's prediction (morning)
-        schedule.every().day.at(config.SCHEDULE_TODAY).do(
-            self._run_today_prediction
-        )
-        
-        # Tomorrow's prediction (evening)
-        schedule.every().day.at(config.SCHEDULE_TOMORROW).do(
-            self._run_tomorrow_prediction
-        )
-        
-        # Evaluate results (night)
-        schedule.every().day.at(config.SCHEDULE_EVALUATE).do(
-            self._run_evaluation
-        )
-        
-        # Model retraining (weekly)
-        schedule.every().monday.at("02:00").do(
-            self._run_model_retraining
-        )
-        
-        # Performance analysis (daily)
-        schedule.every().day.at("23:00").do(
-            self._run_performance_analysis
-        )
-        
-        logger.info("Tasks scheduled successfully")
-    
-    def start(self) -> None:
-        """
-        Start the scheduler in a background thread
-        """
-        if self.running:
-            logger.warning("Scheduler is already running")
-            return
-        
-        logger.info("Starting scheduler")
-        self.running = True
-        
-        # Schedule tasks
-        self.schedule_tasks()
-        
-        # Run scheduler in background thread
-        scheduler_thread = Thread(target=self._run_scheduler, daemon=True)
-        scheduler_thread.start()
-        
-        logger.info("Scheduler started in background thread")
-    
-    def stop(self) -> None:
-        """
-        Stop the scheduler
-        """
-        logger.info("Stopping scheduler")
-        self.running = False
-        schedule.clear()
-    
-    def _run_scheduler(self) -> None:
-        """
-        Run the scheduler loop (internal method)
-        """
-        while self.running:
-            schedule.run_pending()
-            time_module.sleep(60)  # Check every minute
-    
-    def _run_today_prediction(self) -> None:
-        """
-        Run today's prediction task
-        """
-        logger.info("Running today's prediction task")
-        
+    def start(self):
+        """スケジューラーを開始"""
         try:
-            # Scrape today's races
-            races = self.scraper.get_race_schedule()
+            self._schedule_tasks()
+            self.scheduler.start()
+            logger.info("タスクスケジューラーを開始しました")
+            print("✅ スケジューラーが起動しました")
+        except Exception as e:
+            logger.error(f"スケジューラー起動エラー: {e}")
+            raise
+    
+    def _schedule_tasks(self):
+        """定期タスクをスケジュール"""
+        
+        # 当日予測タスク
+        today_hour, today_minute = self._parse_time(self.config.SCHEDULE_TODAY)
+        self.scheduler.add_job(
+            self.predict_today,
+            CronTrigger(hour=today_hour, minute=today_minute),
+            id='predict_today',
+            name='当日予測タスク',
+            replace_existing=True
+        )
+        logger.info(f"当日予測: {today_hour:02d}:{today_minute:02d}にスケジュール")
+        
+        # 翌日予測タスク
+        tomorrow_hour, tomorrow_minute = self._parse_time(self.config.SCHEDULE_TOMORROW)
+        self.scheduler.add_job(
+            self.predict_tomorrow,
+            CronTrigger(hour=tomorrow_hour, minute=tomorrow_minute),
+            id='predict_tomorrow',
+            name='翌日予測タスク',
+            replace_existing=True
+        )
+        logger.info(f"翌日予測: {tomorrow_hour:02d}:{tomorrow_minute:02d}にスケジュール")
+        
+        # 評価タスク
+        eval_hour, eval_minute = self._parse_time(self.config.SCHEDULE_EVALUATE)
+        self.scheduler.add_job(
+            self.evaluate_performance,
+            CronTrigger(hour=eval_hour, minute=eval_minute),
+            id='evaluate_performance',
+            name='パフォーマンス評価タスク',
+            replace_existing=True
+        )
+        logger.info(f"パフォーマンス評価: {eval_hour:02d}:{eval_minute:02d}にスケジュール")
+    
+    @staticmethod
+    def _parse_time(time_str):
+        """時刻文字列を時間と分に変換"""
+        parts = time_str.split(':')
+        return int(parts[0]), int(parts[1])
+    
+    def predict_today(self):
+        """当日予測を実行"""
+        logger.info("=" * 60)
+        logger.info("当日予測タスクを開始")
+        try:
+            predictions = self.model.predict_today()
+            logger.info(f"当日予測完了: {len(predictions)}レース")
             
-            if not races:
-                logger.warning("No races found for today")
-                return
-            
-            # Make predictions
-            predictions = self.predictor_manager.predict_races(races)
-            
-            # Save predictions
-            self.predictor_manager.save_predictions(predictions, mode="today")
-            
-            # Send notifications
-            self.notifier.send_predictions(predictions, mode="today")
-            
-            logger.info(f"Today's prediction completed: {len(predictions.get('high_confidence', []))} high confidence predictions")
+            # 高い信頼度の予測をフィルタリング
+            high_confidence = [p for p in predictions if p['confidence'] >= 0.7]
+            if high_confidence:
+                logger.info(f"高信頼度予測: {len(high_confidence)}件")
+                self._notify_predictions(high_confidence, "当日予測")
             
         except Exception as e:
-            logger.error(f"Error in today's prediction task: {e}")
-            self.notifier.send_alert(
-                alert_type="error",
-                title="今日の予想失敗",
-                message=str(e)
-            )
+            logger.error(f"当日予測エラー: {e}", exc_info=True)
+        logger.info("=" * 60)
     
-    def _run_tomorrow_prediction(self) -> None:
-        """
-        Run tomorrow's prediction task
-        """
-        logger.info("Running tomorrow's prediction task")
-        
+    def predict_tomorrow(self):
+        """翌日予測を実行"""
+        logger.info("=" * 60)
+        logger.info("翌日予測タスクを開始")
         try:
-            from datetime import timedelta
+            predictions = self.model.predict_tomorrow()
+            logger.info(f"翌日予測完了: {len(predictions)}レース")
             
-            # Scrape tomorrow's races
-            tomorrow = datetime.now() + timedelta(days=1)
-            races = self.scraper.get_race_schedule(tomorrow)
-            
-            if not races:
-                logger.warning("No races found for tomorrow")
-                return
-            
-            # Make predictions
-            predictions = self.predictor_manager.predict_races(races)
-            
-            # Save predictions
-            self.predictor_manager.save_predictions(predictions, mode="tomorrow")
-            
-            # Send notifications
-            self.notifier.send_predictions(predictions, mode="tomorrow")
-            
-            logger.info(f"Tomorrow's prediction completed: {len(predictions.get('high_confidence', []))} high confidence predictions")
+            # 高い信頼度の予測をフィルタリング
+            high_confidence = [p for p in predictions if p['confidence'] >= 0.7]
+            if high_confidence:
+                logger.info(f"高信頼度予測: {len(high_confidence)}件")
+                self._notify_predictions(high_confidence, "翌日予測")
             
         except Exception as e:
-            logger.error(f"Error in tomorrow's prediction task: {e}")
-            self.notifier.send_alert(
-                alert_type="error",
-                title="明日の予想失敗",
-                message=str(e)
-            )
+            logger.error(f"翌日予測エラー: {e}", exc_info=True)
+        logger.info("=" * 60)
     
-    def _run_evaluation(self) -> None:
-        """
-        Run result evaluation task
-        """
-        logger.info("Running result evaluation task")
-        
+    def evaluate_performance(self):
+        """パフォーマンスを評価"""
+        logger.info("=" * 60)
+        logger.info("パフォーマンス評価タスクを開始")
         try:
-            # Get yesterday's results
-            from datetime import timedelta
-            yesterday = datetime.now() - timedelta(days=1)
-            results = self.scraper.get_race_results(yesterday)
+            metrics = self.model.evaluate_performance()
+            logger.info(f"精度: {metrics['accuracy']:.2%}")
+            logger.info(f"適合率: {metrics['precision']:.2%}")
+            logger.info(f"再現率: {metrics['recall']:.2%}")
             
-            if not results:
-                logger.info("No results to evaluate")
-                return
-            
-            # Evaluate predictions against results
-            logger.info(f"Evaluated {len(results)} race results")
+            # 精度が低い場合にアラートを送信
+            if metrics['accuracy'] < 0.55:
+                logger.warning("⚠️ 精度が低下しています")
+                self._send_alert(f"精度低下アラート: {metrics['accuracy']:.2%}")
             
         except Exception as e:
-            logger.error(f"Error in evaluation task: {e}")
+            logger.error(f"パフォーマンス評価エラー: {e}", exc_info=True)
+        logger.info("=" * 60)
     
-    def _run_model_retraining(self) -> None:
-        """
-        Run model retraining task
-        """
-        logger.info("Running model retraining task")
-        
+    def _notify_predictions(self, predictions, title):
+        """予測結果を通知"""
         try:
-            if not self.trainer.should_retrain():
-                logger.info("Models don't need retraining yet")
-                return
-            
-            # Prepare training data
-            training_data = self.trainer.prepare_training_data(days=30)
-            
-            if training_data and training_data.get("num_samples", 0) > 100:
-                # Train models
-                self.trainer.train_neural_network(training_data)
-                self.trainer.train_xgboost(training_data)
-                self.trainer.train_lstm(training_data)
-                
-                logger.info("Model retraining completed")
-                self.notifier.send_alert(
-                    alert_type="info",
-                    title="モデル再訓練完了",
-                    message="機械学習モデルが正常に再訓練されました"
-                )
-            else:
-                logger.warning("Insufficient training data")
-            
+            if self.email_notifier:
+                self.email_notifier.send_predictions(predictions, title)
+            logger.info("✅ 通知を送信しました")
         except Exception as e:
-            logger.error(f"Error in model retraining task: {e}")
-            self.notifier.send_alert(
-                alert_type="error",
-                title="モデル再訓練失敗",
-                message=str(e)
-            )
+            logger.error(f"通知送信エラー: {e}")
     
-    def _run_performance_analysis(self) -> None:
-        """
-        Run performance analysis task
-        """
-        logger.info("Running performance analysis task")
-        
+    def _send_alert(self, message):
+        """アラートメッセージを送信"""
         try:
-            # Analyze performance
-            performance = self.analyzer.analyze_prediction_performance(days=7)
-            
-            # Save report
-            self.analyzer.save_performance_report()
-            
-            # Check if accuracy has dropped
-            hit_rate = performance.get("hit_rate", 0.0)
-            if hit_rate < config.ACCURACY_ALERT_THRESHOLD and config.ALERT_LOW_ACCURACY:
-                self.notifier.send_alert(
-                    alert_type="warning",
-                    title="精度突下警告",
-                    message=f"的中率: {hit_rate:.1%} ({config.ACCURACY_ALERT_THRESHOLD:.1%}以下)\\nモデル再訓練を推奨します。"
-                )
-            
-            logger.info(f"Performance analysis completed: hit_rate={hit_rate:.1%}")
-            
+            if self.email_notifier:
+                self.email_notifier.send_alert(message)
         except Exception as e:
-            logger.error(f"Error in performance analysis task: {e}")
+            logger.error(f"アラート送信エラー: {e}")
+    
+    def shutdown(self):
+        """スケジューラーをシャットダウン"""
+        if self.scheduler.running:
+            self.scheduler.shutdown()
+            logger.info("スケジューラーを停止しました")
+
+
+def run_scheduler():
+    """スケジューラーを実行"""
+    scheduler = TaskScheduler()
+    try:
+        scheduler.start()
+        # スケジューラーは独立したスレッドで動作
+        import time
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("ユーザーによる中断")
+        scheduler.shutdown()
+    except Exception as e:
+        logger.error(f"スケジューラー実行エラー: {e}", exc_info=True)
+        scheduler.shutdown()
+
+
+if __name__ == "__main__":
+    run_scheduler()
