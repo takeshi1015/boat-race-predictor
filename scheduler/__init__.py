@@ -1,9 +1,7 @@
 """
-Scheduler package initialization
+スケジューラーパッケージ初期化
 """
 
-from scheduler.task_scheduler import TaskScheduler
+from .task_scheduler import TaskScheduler, run_scheduler
 
-__all__ = [
-    "TaskScheduler",
-]
+__all__ = ['TaskScheduler', 'run_scheduler']
