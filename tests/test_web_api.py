@@ -43,6 +43,15 @@ def test_api_predictions_returns_json(client):
     data = json.loads(response.data)
     assert "timestamp" in data
     assert "predictions" in data
+    predictions = data["predictions"]
+    assert isinstance(predictions, dict)
+    assert len(predictions) > 0
+    for model_name, result in predictions.items():
+        assert "prediction" in result
+        assert "confidence" in result
+        confidence = result["confidence"]
+        assert isinstance(confidence, (int, float))
+        assert 0.0 <= confidence <= 1.0
 
 
 def test_api_health(client):
@@ -115,10 +124,10 @@ def test_post_predict(client):
 
 
 def test_post_predict_invalid_body(client):
-    """POST /api/predict with missing entries should return 400."""
+    """POST /api/predict with missing entries key should return 400."""
     response = client.post(
         "/api/predict",
-        data=json.dumps({"conditions": {}}),
+        data=json.dumps({}),
         content_type="application/json",
     )
     assert response.status_code == 400

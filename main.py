@@ -6,7 +6,7 @@ Boat Race Predictor - Automated boat race prediction system
 import sys
 import argparse
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal, Optional
 
 import config
 from utils.logger import logger
@@ -255,11 +255,11 @@ def _run_web_server() -> None:
     flask_app.run(
         host=config.WEB_HOST,
         port=config.WEB_PORT,
-        debug=True,
+        debug=config.WEB_DEBUG,
     )
 
 
-def _run_all_models_demo(export: str | None = None) -> None:
+def _run_all_models_demo(export: Optional[Literal["json", "csv", "all"]] = None) -> None:
     """Demonstrate all prediction models with sample race data.
 
     Args:
@@ -341,10 +341,9 @@ def _run_all_models_demo(export: str | None = None) -> None:
 
     if export:
         from api.utils import save_results_json, save_results_csv
-        from datetime import datetime as _dt
 
         payload = {
-            "timestamp": _dt.now().isoformat(),
+            "timestamp": datetime.now().isoformat(),
             "models": sorted(all_results.keys()),
             "predictions": all_results,
         }
