@@ -23,14 +23,37 @@ def main():
     )
     parser.add_argument(
         "--mode",
-        choices=["run", "predict-today", "predict-tomorrow", "analyze", "retrain", "predict"],
+        choices=[
+            "run",
+            "predict-today",
+            "predict-tomorrow",
+            "analyze",
+            "retrain",
+            "predict",
+            "web",
+            "api",
+        ],
         default="run",
-        help="Operation mode"
+        help=(
+            "Operation mode: "
+            "'run' starts the continuous scheduler, "
+            "'web'/'api' start the Flask web/API server, "
+            "'predict' runs a demo prediction, "
+            "'predict-today/tomorrow' run the scheduler's daily tasks, "
+            "'analyze' analyses performance, "
+            "'retrain' retrains models"
+        ),
     )
     parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging"
+    )
+    parser.add_argument(
+        "--export",
+        choices=["json", "csv", "all"],
+        default=None,
+        help="Export format when using --mode predict (json, csv, or all)",
     )
     
     args = parser.parse_args()
@@ -59,7 +82,9 @@ def main():
         elif args.mode == "retrain":
             _retrain_models()
         elif args.mode == "predict":
-            _run_all_models_demo()
+            _run_all_models_demo(export=args.export)
+        elif args.mode in ("web", "api"):
+            _run_web_server()
         
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")

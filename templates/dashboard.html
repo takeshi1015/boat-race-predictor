@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}ダッシュボード - ボートレース予測システム{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+  <div class="col">
+    <h2 class="fw-bold"><i class="bi bi-speedometer2 me-2 text-primary"></i>予測ダッシュボード</h2>
+    <p class="text-muted mb-0">すべてのモデルの最新予測を表示します。</p>
+  </div>
+  <div class="col-auto">
+    <div class="btn-group" role="group">
+      <button id="btn-refresh" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-arrow-clockwise me-1"></i>更新
+      </button>
+      <a href="/api/predictions/export/json" class="btn btn-outline-success btn-sm">
+        <i class="bi bi-download me-1"></i>JSON
+      </a>
+      <a href="/api/predictions/export/csv" class="btn btn-outline-success btn-sm">
+        <i class="bi bi-download me-1"></i>CSV
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Ensemble result banner -->
+<div id="ensemble-banner" class="alert alert-primary d-flex align-items-center mb-4" role="alert">
+  <i class="bi bi-star-fill fs-4 me-3"></i>
+  <div>
+    <strong>アンサンブル予測（加重投票）:</strong>
+    <span id="ensemble-prediction" class="ms-2 fw-bold fs-5">読み込み中…</span>
+    <span class="ms-3 badge bg-primary" id="ensemble-confidence"></span>
+  </div>
+</div>
+
+<!-- Model cards -->
+<div id="model-cards" class="row g-3 mb-4">
+  <div class="col-12 text-center py-5 text-muted">
+    <div class="spinner-border" role="status"></div>
+    <p class="mt-2">予測を読み込んでいます…</p>
+  </div>
+</div>
+
+<!-- Charts -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-bar-chart-fill me-2 text-primary"></i>信頼度スコア比較
+      </div>
+      <div class="card-body">
+        <canvas id="confidence-chart" height="220"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-pie-chart-fill me-2 text-success"></i>1位予測分布
+      </div>
+      <div class="card-body">
+        <canvas id="prediction-pie-chart" height="220"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Timestamp -->
+<p class="text-end text-muted small">
+  最終更新: <span id="last-updated">-</span>
+</p>
+{% endblock %}

@@ -75,3 +75,14 @@ LOG_BACKUP_COUNT = int(os.getenv("LOG_BACKUP_COUNT", "5"))
 # ==================== ENVIRONMENT ====================
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
+# ==================== WEB / API SETTINGS ====================
+WEB_HOST = os.getenv("WEB_HOST", "0.0.0.0")
+WEB_PORT = int(os.getenv("WEB_PORT", "5000"))
+WEB_DEBUG = os.getenv("WEB_DEBUG", "False").lower() == "true"
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+
+# ==================== OUTPUT SETTINGS ====================
+OUTPUTS_DIR = os.getenv("OUTPUTS_DIR", "outputs")
+OUTPUTS_HISTORY_DIR = os.path.join(OUTPUTS_DIR, "history")
+OUTPUTS_MAX_HISTORY = int(os.getenv("OUTPUTS_MAX_HISTORY", "100"))
