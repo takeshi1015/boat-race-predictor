@@ -76,8 +76,7 @@ class RuleBasedModel(BasePredictionModel):
         if not entries:
             return self.empty_prediction()
 
-        scored = self._score_entries(entries, race_data)
-        scored.sort(key=lambda x: x["score"], reverse=True)
+        scored = sorted(self._score_entries(entries, race_data), key=lambda x: x["score"], reverse=True)
 
         top3 = [item["id"] for item in scored[:3]]
         top_score = scored[0]["score"] if scored else 0.0

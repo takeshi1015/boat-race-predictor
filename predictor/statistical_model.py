@@ -59,8 +59,7 @@ class StatisticalModel(BasePredictionModel):
         if not entries:
             return self.empty_prediction()
 
-        scored = self._compute_scores(entries)
-        scored.sort(key=lambda x: x["score"], reverse=True)
+        scored = sorted(self._compute_scores(entries), key=lambda x: x["score"], reverse=True)
 
         top3 = [item["id"] for item in scored[:3]]
 
