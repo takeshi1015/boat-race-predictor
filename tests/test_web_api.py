@@ -137,47 +137,64 @@ def test_post_predict_invalid_body(client):
 # File export via CLI helper
 # ---------------------------------------------------------------------------
 
-def test_run_all_models_demo_saves_json(tmp_path, monkeypatch):
-    """_run_all_models_demo(export='json') should write results.json."""
+@pytest.fixture
+def output_dirs(tmp_path, monkeypatch):
+    """Fixture that configures temporary output directories for export tests."""
     import config as cfg
 
     outputs_dir = str(tmp_path / "outputs")
     history_dir = str(tmp_path / "outputs" / "history")
     monkeypatch.setattr(cfg, "OUTPUTS_DIR", outputs_dir)
     monkeypatch.setattr(cfg, "OUTPUTS_HISTORY_DIR", history_dir)
+    return outputs_dir, history_dir
+
+
+def test_run_all_models_demo_saves_json(output_dirs):
+    """_run_all_models_demo(export='json') should write valid results.json."""
+    outputs_dir, history_dir = output_dirs
 
     from main import _run_all_models_demo
 
     _run_all_models_demo(export="json")
 
-    assert os.path.exists(os.path.join(outputs_dir, "results.json"))
-    assert len(os.listdir(history_dir)) >= 1
+    json_path = os.path.join(outputs_dir, "results.json")
+    assert os.path.exists(json_path)
+
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    assert "timestamp" in data
+    assert "models" in data
+    assert "predictions" in data
+    assert len(data["predictions"]) > 0
+
+    history_files = [f for f in os.listdir(history_dir) if f.endswith(".json")]
+    assert len(history_files) >= 1
 
 
-def test_run_all_models_demo_saves_csv(tmp_path, monkeypatch):
-    """_run_all_models_demo(export='csv') should write results.csv."""
-    import config as cfg
-
-    outputs_dir = str(tmp_path / "outputs")
-    history_dir = str(tmp_path / "outputs" / "history")
-    monkeypatch.setattr(cfg, "OUTPUTS_DIR", outputs_dir)
-    monkeypatch.setattr(cfg, "OUTPUTS_HISTORY_DIR", history_dir)
+def test_run_all_models_demo_saves_csv(output_dirs):
+    """_run_all_models_demo(export='csv') should write valid results.csv."""
+    outputs_dir, _ = output_dirs
 
     from main import _run_all_models_demo
 
     _run_all_models_demo(export="csv")
 
-    assert os.path.exists(os.path.join(outputs_dir, "results.csv"))
+    csv_path = os.path.join(outputs_dir, "results.csv")
+    assert os.path.exists(csv_path)
+
+    with open(csv_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "timestamp" in content
+    assert "model" in content
+    assert "prediction" in content
+    assert "confidence" in content
+    lines = [l for l in content.splitlines() if l.strip()]
+    assert len(lines) >= 2  # header + at least one data row
 
 
-def test_run_all_models_demo_saves_all(tmp_path, monkeypatch):
+def test_run_all_models_demo_saves_all(output_dirs):
     """_run_all_models_demo(export='all') should write both json and csv."""
-    import config as cfg
-
-    outputs_dir = str(tmp_path / "outputs")
-    history_dir = str(tmp_path / "outputs" / "history")
-    monkeypatch.setattr(cfg, "OUTPUTS_DIR", outputs_dir)
-    monkeypatch.setattr(cfg, "OUTPUTS_HISTORY_DIR", history_dir)
+    outputs_dir, _ = output_dirs
 
     from main import _run_all_models_demo
 
