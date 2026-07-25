@@ -312,3 +312,16 @@ def get_models_info() -> Response:
         JSON object mapping model identifiers to their metadata.
     """
     return jsonify({"models": MODEL_INFO})
+
+
+# ---------------------------------------------------------------------------
+# GET /api/health
+# ---------------------------------------------------------------------------
+@api_bp.route("/health", methods=["GET"])
+def health_check() -> Response:
+    """Return a simple health-check response.
+
+    Returns:
+        JSON object with status ``ok`` and a current timestamp.
+    """
+    return jsonify({"status": "ok", "timestamp": datetime.now().isoformat()})

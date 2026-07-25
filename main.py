@@ -6,7 +6,7 @@ Boat Race Predictor - Automated boat race prediction system
 import sys
 import argparse
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal, Optional
 
 import config
 from utils.logger import logger
@@ -242,8 +242,32 @@ def _retrain_models():
     logger.info("Model retraining completed")
 
 
-def _run_all_models_demo() -> None:
-    """Demonstrate all prediction models with sample race data."""
+def _run_web_server() -> None:
+    """Start the Flask web server on localhost:5000.
+
+    Imports the Flask application from app.py and starts the development
+    server with debug mode enabled.
+    """
+    from app import create_app
+
+    flask_app = create_app()
+    logger.info("Starting Flask web server at http://localhost:%d", config.WEB_PORT)
+    flask_app.run(
+        host=config.WEB_HOST,
+        port=config.WEB_PORT,
+        debug=config.WEB_DEBUG,
+    )
+
+
+def _run_all_models_demo(export: Optional[Literal["json", "csv", "all"]] = None) -> None:
+    """Demonstrate all prediction models with sample race data.
+
+    Args:
+        export: Optional export format. One of ``"json"``, ``"csv"``, or
+            ``"all"``.  When provided, prediction results are saved to
+            ``outputs/results.<ext>`` and a timestamped copy is written to
+            ``outputs/history/<timestamp>.<ext>``.
+    """
     logger.info("Running all prediction models with sample data")
 
     sample_race: Dict[str, Any] = {
@@ -314,6 +338,25 @@ def _run_all_models_demo() -> None:
             result.get("prediction"),
             result.get("confidence", 0.0),
         )
+
+    if export:
+        from api.utils import save_results_json, save_results_csv
+
+        payload = {
+            "timestamp": datetime.now().isoformat(),
+            "models": sorted(all_results.keys()),
+            "predictions": all_results,
+        }
+
+        save_json = export in ("json", "all")
+        save_csv = export in ("csv", "all")
+
+        if save_json:
+            json_path = save_results_json(payload)
+            logger.info("Prediction results saved to %s", json_path)
+        if save_csv:
+            csv_path = save_results_csv(payload)
+            logger.info("Prediction results saved to %s", csv_path)
 
 
 if __name__ == "__main__":
