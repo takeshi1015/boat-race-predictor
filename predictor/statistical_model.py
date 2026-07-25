@@ -13,6 +13,9 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# Fraction retained by the house (deducted from probability-based payouts).
+_HOUSE_TAKE = 0.25
+
 # Weights used for the composite statistical score
 _SCORE_WEIGHTS: Dict[str, float] = {
     "win_rate": 0.30,
@@ -127,20 +130,19 @@ class StatisticalModel(BasePredictionModel):
 
         values = list(probabilities.values())
         top_prob = max(values) if values else 0.0
+        sorted_values = sorted(values, reverse=True)
         top_2_prob = (
-            top_prob * sorted(values, reverse=True)[1]
-            if len(values) >= 2
+            top_prob * sorted_values[1]
+            if len(sorted_values) >= 2
             else 0.0
         )
         top_3_prob = (
-            top_prob
-            * sorted(values, reverse=True)[1]
-            * sorted(values, reverse=True)[2]
-            if len(values) >= 3
+            top_prob * sorted_values[1] * sorted_values[2]
+            if len(sorted_values) >= 3
             else 0.0
         )
 
-        house_take = 0.25
+        house_take = _HOUSE_TAKE
 
         def _payout(prob: float) -> float:
             return round((1.0 - house_take) / prob, 1) if prob > 0 else 0.0

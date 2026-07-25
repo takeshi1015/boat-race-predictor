@@ -10,6 +10,9 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# Fraction retained by the house (deducted from probability-based payouts).
+_HOUSE_TAKE = 0.25
+
 
 class RuleBasedModel(BasePredictionModel):
     """Rule-based prediction engine using domain expert knowledge.
@@ -129,8 +132,9 @@ class RuleBasedModel(BasePredictionModel):
         """
         result = self.predict(race_data)
         confidence = result.get("confidence", 0.0)
-        win_payout = round(0.75 / confidence, 1) if confidence > 0 else 0.0
-        trifecta_payout = round(0.75 / (confidence ** 3), 0) if confidence > 0 else 0.0
+        take_complement = 1.0 - _HOUSE_TAKE
+        win_payout = round(take_complement / confidence, 1) if confidence > 0 else 0.0
+        trifecta_payout = round(take_complement / (confidence ** 3), 0) if confidence > 0 else 0.0
         result["payout"] = {
             "win": win_payout,
             "trifecta": trifecta_payout,

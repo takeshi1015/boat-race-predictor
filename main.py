@@ -150,12 +150,24 @@ def _ensemble_predictions(
     }
 
 
+def _get_scheduler():
+    """Create and return a TaskScheduler instance.
+
+    The import is deferred to avoid the pre-existing broken import chain
+    that exists in the scheduler package when loaded at module level.
+
+    Returns:
+        A new TaskScheduler instance.
+    """
+    from scheduler.task_scheduler import TaskScheduler
+    return TaskScheduler()
+
+
 def _run_scheduler():
     """Run the main scheduler in continuous mode"""
     logger.info("Starting scheduler in continuous mode")
 
-    from scheduler.task_scheduler import TaskScheduler
-    scheduler = TaskScheduler()
+    scheduler = _get_scheduler()
     scheduler.start()
     
     try:
@@ -173,9 +185,7 @@ def _predict_today():
     """Run today's prediction immediately"""
     logger.info("Running today's prediction task")
 
-    from scheduler.task_scheduler import TaskScheduler
-    scheduler = TaskScheduler()
-    scheduler._run_today_prediction()
+    _get_scheduler()._run_today_prediction()
     
     logger.info("Today's prediction task completed")
 
@@ -184,9 +194,7 @@ def _predict_tomorrow():
     """Run tomorrow's prediction immediately"""
     logger.info("Running tomorrow's prediction task")
 
-    from scheduler.task_scheduler import TaskScheduler
-    scheduler = TaskScheduler()
-    scheduler._run_tomorrow_prediction()
+    _get_scheduler()._run_tomorrow_prediction()
     
     logger.info("Tomorrow's prediction task completed")
 
@@ -195,9 +203,7 @@ def _analyze_performance():
     """Analyze and display current performance metrics"""
     logger.info("Analyzing prediction performance")
 
-    from scheduler.task_scheduler import TaskScheduler
-    scheduler = TaskScheduler()
-    scheduler._run_performance_analysis()
+    _get_scheduler()._run_performance_analysis()
     
     logger.info("Performance analysis completed")
 
@@ -206,9 +212,7 @@ def _retrain_models():
     """Retrain machine learning models immediately"""
     logger.info("Retraining models")
 
-    from scheduler.task_scheduler import TaskScheduler
-    scheduler = TaskScheduler()
-    scheduler._run_model_retraining()
+    _get_scheduler()._run_model_retraining()
     
     logger.info("Model retraining completed")
 

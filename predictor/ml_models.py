@@ -14,6 +14,9 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# Fraction retained by the house (deducted from probability-based payouts).
+_HOUSE_TAKE = 0.25
+
 
 # ---------------------------------------------------------------------------
 # Helpers shared by all ML models
@@ -156,7 +159,7 @@ class LogisticRegressionModel(BasePredictionModel):
         )
         if probs:
             top_prob = max(probs)
-            win_payout = round(0.75 / top_prob, 1) if top_prob > 0 else 0.0
+            win_payout = round((1.0 - _HOUSE_TAKE) / top_prob, 1) if top_prob > 0 else 0.0
         else:
             win_payout = 0.0
         result["payout"] = {"win": win_payout}
@@ -280,7 +283,7 @@ class RandomForestModel(BasePredictionModel):
             result.get("details", {}).get("probabilities", {}).values()
         )
         top_prob = max(probs) if probs else 0.0
-        win_payout = round(0.75 / top_prob, 1) if top_prob > 0 else 0.0
+        win_payout = round((1.0 - _HOUSE_TAKE) / top_prob, 1) if top_prob > 0 else 0.0
         result["payout"] = {"win": win_payout}
         return result
 
@@ -408,7 +411,7 @@ class NeuralNetworkModel(BasePredictionModel):
             result.get("details", {}).get("probabilities", {}).values()
         )
         top_prob = max(probs) if probs else 0.0
-        win_payout = round(0.75 / top_prob, 1) if top_prob > 0 else 0.0
+        win_payout = round((1.0 - _HOUSE_TAKE) / top_prob, 1) if top_prob > 0 else 0.0
         result["payout"] = {"win": win_payout}
         return result
 
