@@ -33,7 +33,7 @@ class CSVImporter:
     """
 
     def __init__(self, encoding: str = "utf-8", delimiter: str = ",") -> None:
-        """Initialise the CSV importer.
+        """Initialize the CSV importer.
 
         Args:
             encoding: File encoding (default 'utf-8').

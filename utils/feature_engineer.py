@@ -137,7 +137,7 @@ class FeatureEngineer:
         ]
 
     def normalize(self, matrix: np.ndarray) -> np.ndarray:
-        """Apply min-max normalisation column-wise to a feature matrix.
+        """Apply min-max normalization column-wise to a feature matrix.
 
         Columns with zero range (constant columns) are left unchanged.
 

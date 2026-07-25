@@ -46,7 +46,7 @@ class WebScraper:
         retry_count: int = 3,
         retry_delay: float = 2.0,
     ) -> None:
-        """Initialise the web scraper.
+        """Initialize the web scraper.
 
         Args:
             base_url: Base URL of the target website.

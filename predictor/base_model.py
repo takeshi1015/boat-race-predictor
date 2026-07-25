@@ -21,7 +21,7 @@ class BasePredictionModel(ABC):
     """
 
     def __init__(self, model_name: str, version: str = "1.0") -> None:
-        """Initialise the base model.
+        """Initialize the base model.
 
         Args:
             model_name: Human-readable name of the model.

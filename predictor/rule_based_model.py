@@ -49,7 +49,7 @@ class RuleBasedModel(BasePredictionModel):
     def __init__(
         self, rules: Optional[Dict[str, float]] = None
     ) -> None:
-        """Initialise the rule-based model.
+        """Initialize the rule-based model.
 
         Args:
             rules: Optional override of the default rule parameters.

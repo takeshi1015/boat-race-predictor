@@ -37,7 +37,7 @@ class APIClient:
         retry_count: int = 3,
         retry_delay: float = 2.0,
     ) -> None:
-        """Initialise the API client.
+        """Initialize the API client.
 
         Args:
             base_url: Base URL of the external API.
