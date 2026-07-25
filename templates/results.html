@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}結果詳細 - ボートレース予測システム{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+  <div class="col">
+    <h2 class="fw-bold"><i class="bi bi-list-ol me-2 text-primary"></i>予測結果詳細</h2>
+    <p class="text-muted mb-0">各モデルの詳細な予測結果と信頼度スコアを表示します。</p>
+  </div>
+  <div class="col-auto">
+    <div class="btn-group">
+      <a href="/api/predictions/export/json" class="btn btn-outline-success btn-sm">
+        <i class="bi bi-filetype-json me-1"></i>JSON ダウンロード
+      </a>
+      <a href="/api/predictions/export/csv" class="btn btn-outline-success btn-sm">
+        <i class="bi bi-filetype-csv me-1"></i>CSV ダウンロード
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Detailed results table -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold">
+    <i class="bi bi-table me-2"></i>モデル別予測結果
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0" id="results-table">
+        <thead class="table-light">
+          <tr>
+            <th>モデル</th>
+            <th>1位予測</th>
+            <th>2位予測</th>
+            <th>3位予測</th>
+            <th>信頼度</th>
+            <th>信頼度バー</th>
+          </tr>
+        </thead>
+        <tbody id="results-tbody">
+          <tr>
+            <td colspan="6" class="text-center py-4 text-muted">
+              <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+              読み込み中…
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- History section -->
+<div class="card shadow-sm">
+  <div class="card-header fw-semibold">
+    <i class="bi bi-clock-history me-2"></i>予測履歴（最新 10 件）
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>日時</th>
+            <th>アンサンブル予測</th>
+            <th>信頼度</th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody">
+          <tr>
+            <td colspan="3" class="text-center py-3 text-muted">読み込み中…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    loadResultsTable();
+    loadHistoryTable();
+  });
+
+  async function loadResultsTable() {
+    const tbody = document.getElementById("results-tbody");
+    try {
+      const res = await fetch("/api/predictions");
+      const data = await res.json();
+      const preds = data.predictions || {};
+      const modelLabels = {
+        logistic_regression: "ロジスティック回帰",
+        random_forest: "ランダムフォレスト",
+        neural_network: "ニューラルネットワーク",
+        rule_based: "ルールベース",
+        statistical: "統計モデル",
+        ensemble: "アンサンブル",
+      };
+      tbody.innerHTML = "";
+      Object.entries(preds).forEach(([modelKey, info]) => {
+        const pred = info.prediction || [];
+        const conf = (info.confidence || 0) * 100;
+        const row = document.createElement("tr");
+        if (modelKey === "ensemble") row.classList.add("table-primary", "fw-bold");
+        row.innerHTML = `
+          <td>${modelLabels[modelKey] || modelKey}</td>
+          <td>${pred[0] ?? "-"}</td>
+          <td>${pred[1] ?? "-"}</td>
+          <td>${pred[2] ?? "-"}</td>
+          <td>${conf.toFixed(1)}%</td>
+          <td style="min-width:120px">
+            <div class="progress" style="height:8px">
+              <div class="progress-bar" style="width:${conf}%"></div>
+            </div>
+          </td>`;
+        tbody.appendChild(row);
+      });
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">データの読み込みに失敗しました。</td></tr>`;
+    }
+  }
+
+  async function loadHistoryTable() {
+    const tbody = document.getElementById("history-tbody");
+    try {
+      const res = await fetch("/api/history");
+      const data = await res.json();
+      const history = (data.history || []).slice(0, 10);
+      tbody.innerHTML = "";
+      if (history.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted">履歴がありません。</td></tr>`;
+        return;
+      }
+      history.forEach(entry => {
+        const ens = (entry.predictions || {}).ensemble || {};
+        const pred = (ens.prediction || []).join(", ") || "-";
+        const conf = ((ens.confidence || 0) * 100).toFixed(1);
+        const row = document.createElement("tr");
+        row.innerHTML = `<td>${entry.timestamp || "-"}</td><td>${pred}</td><td>${conf}%</td>`;
+        tbody.appendChild(row);
+      });
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="3" class="text-center text-danger">履歴の読み込みに失敗しました。</td></tr>`;
+    }
+  }
+</script>
+{% endblock %}

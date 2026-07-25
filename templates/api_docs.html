@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}API ドキュメント - ボートレース予測システム{% endblock %}
+
+{% block content %}
+<h2 class="fw-bold mb-4"><i class="bi bi-code-slash me-2 text-primary"></i>REST API ドキュメント</h2>
+<p class="text-muted">すべてのエンドポイントのベース URL は <code>http://localhost:5000/api</code> です。</p>
+
+<!-- Endpoint cards -->
+{% set endpoints = [
+  {
+    "method": "GET",
+    "path": "/api/predictions",
+    "badge": "success",
+    "title": "全モデルの最新予測を取得",
+    "desc": "全モデル（ロジスティック回帰・ランダムフォレスト・ニューラルネットワーク・ルールベース・統計・アンサンブル）の最新予測結果を返します。",
+    "response": '{\n  "timestamp": "2026-07-25T12:00:00",\n  "models": ["ensemble", "logistic_regression", ...],\n  "predictions": {\n    "ensemble": { "prediction": [1, 2, 3], "confidence": 0.75 },\n    ...\n  }\n}'
+  },
+  {
+    "method": "GET",
+    "path": "/api/predictions/&lt;model_name&gt;",
+    "badge": "success",
+    "title": "特定モデルの予測を取得",
+    "desc": "指定したモデルの予測を返します。有効な model_name: logistic_regression, random_forest, neural_network, rule_based, statistical, ensemble",
+    "response": '{\n  "timestamp": "2026-07-25T12:00:00",\n  "model": "ensemble",\n  "prediction": { "prediction": [1, 2, 3], "confidence": 0.75 }\n}'
+  },
+  {
+    "method": "POST",
+    "path": "/api/predict",
+    "badge": "warning text-dark",
+    "title": "レースデータから即時予測",
+    "desc": "レースデータを受け取り、全モデルで即時予測を実行します。",
+    "response": '// リクエストボディ:\n{\n  "entries": [\n    { "frame_number": 1, "player_id": "P001", "win_rate": 0.55, ... }\n  ],\n  "conditions": { "wind_speed": 2.0, "wave_height": 5.0 }\n}\n\n// レスポンス:\n{\n  "timestamp": "...",\n  "models": [...],\n  "predictions": { ... }\n}'
+  },
+  {
+    "method": "GET",
+    "path": "/api/predictions/export/csv",
+    "badge": "success",
+    "title": "CSV エクスポート",
+    "desc": "最新の予測結果を CSV ファイルとしてダウンロードします。",
+    "response": "// ファイルダウンロード (predictions.csv)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/predictions/export/json",
+    "badge": "success",
+    "title": "JSON エクスポート",
+    "desc": "最新の予測結果を JSON ファイルとしてダウンロードします。",
+    "response": "// ファイルダウンロード (predictions.json)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/history",
+    "badge": "success",
+    "title": "予測履歴を取得",
+    "desc": "直近100件の予測履歴を返します。",
+    "response": '{\n  "count": 10,\n  "history": [ { "timestamp": "...", "predictions": {...} }, ... ]\n}'
+  },
+  {
+    "method": "GET",
+    "path": "/api/models/info",
+    "badge": "success",
+    "title": "モデル情報を取得",
+    "desc": "利用可能な全モデルのメタ情報（名前・説明・種別）を返します。",
+    "response": '{\n  "models": {\n    "ensemble": { "name": "Ensemble ...", "type": "ensemble", "description": "..." },\n    ...\n  }\n}'
+  }
+] %}
+
+{% for ep in endpoints %}
+<div class="card shadow-sm mb-3">
+  <div class="card-header d-flex align-items-center gap-2">
+    <span class="badge bg-{{ ep.badge }}">{{ ep.method }}</span>
+    <code class="fs-6">{{ ep.path | safe }}</code>
+  </div>
+  <div class="card-body">
+    <h6 class="fw-semibold">{{ ep.title }}</h6>
+    <p class="text-muted small mb-2">{{ ep.desc }}</p>
+    <pre class="bg-light p-3 rounded small mb-0"><code>{{ ep.response }}</code></pre>
+  </div>
+</div>
+{% endfor %}
+
+<!-- Quick test links -->
+<div class="card shadow-sm mt-4">
+  <div class="card-header fw-semibold"><i class="bi bi-lightning-fill me-2 text-warning"></i>クイックテスト</div>
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2">
+      <a href="/api/predictions" target="_blank" class="btn btn-sm btn-outline-primary">GET /api/predictions</a>
+      <a href="/api/predictions/ensemble" target="_blank" class="btn btn-sm btn-outline-primary">GET /api/predictions/ensemble</a>
+      <a href="/api/history" target="_blank" class="btn btn-sm btn-outline-primary">GET /api/history</a>
+      <a href="/api/models/info" target="_blank" class="btn btn-sm btn-outline-primary">GET /api/models/info</a>
+      <a href="/api/predictions/export/json" target="_blank" class="btn btn-sm btn-outline-success">Export JSON</a>
+      <a href="/api/predictions/export/csv" target="_blank" class="btn btn-sm btn-outline-success">Export CSV</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
