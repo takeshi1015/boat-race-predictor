@@ -237,7 +237,7 @@ class BoatRaceScraper:
         
         return races
     
-    def _parse_race_details(self, html: str, race_id: str) -> Dict[str, Any]]:
+    def _parse_race_details(self, html: str, race_id: str) -> Dict[str, Any]:
         """Parse race details from HTML"""
         soup = BeautifulSoup(html, "html.parser")
         race_details = {"race_id": race_id}
@@ -271,7 +271,7 @@ class BoatRaceScraper:
         
         return race_details
     
-    def _parse_player_stats(self, html: str) -> Dict[str, Any]]:
+    def _parse_player_stats(self, html: str) -> Dict[str, Any]:
         """Parse player statistics from HTML"""
         soup = BeautifulSoup(html, "html.parser")
         player_stats = {}
@@ -290,7 +290,7 @@ class BoatRaceScraper:
         
         return player_stats
     
-    def _parse_boat_stats(self, html: str) -> Dict[str, Any]]:
+    def _parse_boat_stats(self, html: str) -> Dict[str, Any]:
         """Parse boat statistics from HTML"""
         soup = BeautifulSoup(html, "html.parser")
         boat_stats = {}
