@@ -156,7 +156,7 @@ class APIClient:
             "Content-Type": "application/json",
         }
         if self.api_key:
-            headers["Authorization"] = f"******"
+            headers["Authorization"] = "Bearer " + self.api_key
         return headers
 
     def _get(

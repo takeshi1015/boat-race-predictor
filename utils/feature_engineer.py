@@ -153,8 +153,8 @@ class FeatureEngineer:
 
         # Avoid division by zero for constant columns
         col_range_safe = np.where(col_range == 0, 1.0, col_range)
-        normalised = (matrix - col_min) / col_range_safe
-        return normalised
+        normalized = (matrix - col_min) / col_range_safe
+        return normalized
 
     def compute_score_vector(
         self,
