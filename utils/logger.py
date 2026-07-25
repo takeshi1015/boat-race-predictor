@@ -13,6 +13,9 @@ LOG_DIR = "logs"
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
+# Module-level logger instance for convenience imports
+logger = logging.getLogger("boat_race_predictor")
+
 
 def setup_logger(name, level=logging.INFO):
     """ロガーを設定"""

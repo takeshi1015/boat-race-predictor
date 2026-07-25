@@ -7,7 +7,7 @@ import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.declarative import declarative_base
-from config import Config
+import config as _config
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -20,7 +20,6 @@ class DatabaseManager:
     """データベース接続管理クラス"""
     
     def __init__(self):
-        self.config = Config()
         self.engine = None
         self.SessionLocal = None
         self._initialize_engine()
@@ -28,12 +27,12 @@ class DatabaseManager:
     def _initialize_engine(self):
         """データベースエンジンを初期化"""
         try:
-            db_url = self.config.DATABASE_URL
+            db_url = _config.DATABASE_URL
             logger.info(f"データベースに接続中: {db_url}")
             
             self.engine = create_engine(
                 db_url,
-                echo=self.config.DEBUG_MODE,
+                echo=getattr(_config, 'DEBUG', False),
                 pool_size=10,
                 max_overflow=20,
                 pool_pre_ping=True
