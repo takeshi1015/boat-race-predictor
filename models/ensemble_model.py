@@ -6,7 +6,7 @@
 import logging
 import numpy as np
 from datetime import datetime
-from sklearn.preprocessing import StandardScaler
+from database.db_manager import get_db_manager
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -16,7 +16,7 @@ class EnsembleModel:
     """複数モデルのアンサンブル予測"""
     
     def __init__(self):
-        self.scaler = StandardScaler()
+        self.scaler = None
         self.models = {}
         self.model_weights = {
             'neural_network': 0.4,
@@ -100,10 +100,29 @@ class EnsembleModel:
     def _get_race_data(self, period):
         """レースデータを取得"""
         try:
-            # SQLでレースデータを取得
-            # 実装例
-            races = []
-            return races
+            target_date = datetime.now()
+            if period == 'tomorrow':
+                from datetime import timedelta
+                target_date = target_date + timedelta(days=1)
+
+            db_manager = get_db_manager()
+            session = db_manager.get_session()
+            try:
+                rows = db_manager.get_races_by_date(session, target_date)
+                races = []
+                for row in rows:
+                    races.append({
+                        'race_id': row.race_id,
+                        'date': row.date.isoformat() if row.date else "",
+                        'place': row.venue,
+                        'race_number': row.race_number,
+                        'weather': 'unknown',
+                        'water_condition': row.water_surface or 'unknown',
+                        'start_time_hour': 0,
+                    })
+                return races
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"レースデータ取得エラー: {e}")
             return []

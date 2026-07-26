@@ -21,7 +21,7 @@ from database.models import (
 class DatabaseManager:
     """Database management class"""
     
-    def __init__(self, database_url: str = config.DATABASE_URL):
+    def __init__(self, database_url: str = "sqlite:///./boat_race.db"):
         """
         Initialize database manager
         
