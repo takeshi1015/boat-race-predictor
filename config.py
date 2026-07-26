@@ -9,7 +9,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ==================== DATABASE ====================
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/boat_race_db")
+DATABASE_URL = os.getenv("BOAT_RACE_DATABASE_URL") or os.getenv("DATABASE_URL", "sqlite:///./boat_race.db")
+if DATABASE_URL.startswith("postgresql://") and DATABASE_URL.endswith("localhost:5432/boat_race_db"):
+    DATABASE_URL = "sqlite:///./boat_race.db"
 DATABASE_ECHO = os.getenv("DATABASE_ECHO", "False").lower() == "true"
 
 # ==================== EMAIL SETTINGS ====================
@@ -86,3 +88,15 @@ CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 OUTPUTS_DIR = os.getenv("OUTPUTS_DIR", "outputs")
 OUTPUTS_HISTORY_DIR = os.path.join(OUTPUTS_DIR, "history")
 OUTPUTS_MAX_HISTORY = int(os.getenv("OUTPUTS_MAX_HISTORY", "100"))
+
+
+class Config:
+    """Backward-compatible config object interface."""
+
+    def __getattr__(self, name):
+        if name == "EMAIL_RECIPIENTS":
+            return ",".join(EMAIL_RECIPIENTS)
+        try:
+            return globals()[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc

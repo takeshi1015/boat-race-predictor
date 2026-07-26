@@ -3,11 +3,11 @@
 APSchedulerを使用して、定期的なタスクをスケジュール・実行
 """
 
-import os
-import logging
 from datetime import datetime
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+
 from config import Config
 from models.ensemble_model import EnsembleModel
 from notifiers.email_notifier import EmailNotifier
@@ -132,6 +132,19 @@ class TaskScheduler:
         except Exception as e:
             logger.error(f"パフォーマンス評価エラー: {e}", exc_info=True)
         logger.info("=" * 60)
+
+    # Backward compatibility with main.py command handlers
+    def _run_today_prediction(self):
+        self.predict_today()
+
+    def _run_tomorrow_prediction(self):
+        self.predict_tomorrow()
+
+    def _run_performance_analysis(self):
+        self.evaluate_performance()
+
+    def _run_model_retraining(self):
+        logger.warning("モデル再学習は未実装のためスキップします")
     
     def _notify_predictions(self, predictions, title):
         """予測結果を通知"""
