@@ -11,6 +11,11 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# デフォルト値定数
+_DEFAULT_WEATHER = 'sunny'
+_DEFAULT_WATER_CONDITION = 'calm'
+_DEFAULT_START_HOUR = 10
+
 
 class EnsembleModel:
     """複数モデルのアンサンブル予測"""
@@ -100,10 +105,36 @@ class EnsembleModel:
     def _get_race_data(self, period):
         """レースデータを取得"""
         try:
-            # SQLでレースデータを取得
-            # 実装例
-            races = []
-            return races
+            from database.db_manager import get_db_manager
+            from datetime import datetime, timedelta
+
+            db = get_db_manager()
+            session = db.get_session()
+            try:
+                today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                if period == 'tomorrow':
+                    target_date = today + timedelta(days=1)
+                else:
+                    target_date = today
+
+                race_records = db.get_races_by_date(session, target_date)
+
+                races = []
+                for r in race_records:
+                    races.append({
+                        'race_id': r.race_id,
+                        'date': r.date,
+                        'place': r.venue,
+                        'race_number': r.race_number,
+                        'weather': r.weather or _DEFAULT_WEATHER,
+                        'water_condition': r.water_surface or _DEFAULT_WATER_CONDITION,
+                        'start_time_hour': r.date.hour if r.date else _DEFAULT_START_HOUR,
+                    })
+
+                logger.info(f"{period}のレースデータ取得: {len(races)}件")
+                return races
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"レースデータ取得エラー: {e}")
             return []

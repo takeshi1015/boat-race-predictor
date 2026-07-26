@@ -91,10 +91,16 @@ class TaskScheduler:
             if high_confidence:
                 logger.info(f"高信頼度予測: {len(high_confidence)}件")
                 self._notify_predictions(high_confidence, "当日予測")
+            else:
+                logger.info("信頼度0.7以上の予測はありません")
             
         except Exception as e:
             logger.error(f"当日予測エラー: {e}", exc_info=True)
         logger.info("=" * 60)
+
+    def _run_today_prediction(self):
+        """当日予測タスクを実行（main.pyから呼び出し）"""
+        return self.predict_today()
     
     def predict_tomorrow(self):
         """翌日予測を実行"""
@@ -109,10 +115,16 @@ class TaskScheduler:
             if high_confidence:
                 logger.info(f"高信頼度予測: {len(high_confidence)}件")
                 self._notify_predictions(high_confidence, "翌日予測")
+            else:
+                logger.info("信頼度0.7以上の予測はありません")
             
         except Exception as e:
             logger.error(f"翌日予測エラー: {e}", exc_info=True)
         logger.info("=" * 60)
+
+    def _run_tomorrow_prediction(self):
+        """翌日予測タスクを実行（main.pyから呼び出し）"""
+        return self.predict_tomorrow()
     
     def evaluate_performance(self):
         """パフォーマンスを評価"""
@@ -131,6 +143,17 @@ class TaskScheduler:
             
         except Exception as e:
             logger.error(f"パフォーマンス評価エラー: {e}", exc_info=True)
+        logger.info("=" * 60)
+
+    def _run_performance_analysis(self):
+        """パフォーマンス分析タスクを実行（main.pyから呼び出し）"""
+        return self.evaluate_performance()
+
+    def _run_model_retraining(self):
+        """モデル再トレーニングタスクを実行（main.pyから呼び出し）"""
+        logger.info("=" * 60)
+        logger.info("モデル再トレーニングタスクを開始")
+        logger.info("モデル再トレーニングは現在未実装です")
         logger.info("=" * 60)
     
     def _notify_predictions(self, predictions, title):
