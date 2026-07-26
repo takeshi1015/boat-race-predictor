@@ -73,6 +73,7 @@ class Race(Base):
     # Conditions
     wind_speed = Column(Float, default=0.0)
     wind_direction = Column(String)
+    weather = Column(String)  # sunny, cloudy, rainy
     water_surface = Column(String)  # calm, slightly_rough, rough
     temperature = Column(Float, default=0.0)
     humidity = Column(Float, default=0.0)

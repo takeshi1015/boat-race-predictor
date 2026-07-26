@@ -9,11 +9,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ==================== DATABASE ====================
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/boat_race_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./boat_race.db")
 DATABASE_ECHO = os.getenv("DATABASE_ECHO", "False").lower() == "true"
 
 # ==================== EMAIL SETTINGS ====================
-USE_EMAIL = os.getenv("USE_EMAIL", "True").lower() == "true"
+USE_EMAIL = os.getenv("USE_EMAIL", "False").lower() == "true"
 EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "your_email@example.com")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "your_app_password")
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
@@ -86,3 +86,28 @@ CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 OUTPUTS_DIR = os.getenv("OUTPUTS_DIR", "outputs")
 OUTPUTS_HISTORY_DIR = os.path.join(OUTPUTS_DIR, "history")
 OUTPUTS_MAX_HISTORY = int(os.getenv("OUTPUTS_MAX_HISTORY", "100"))
+
+
+class Config:
+    """Configuration class that exposes module-level settings as instance attributes."""
+
+    DATABASE_URL = DATABASE_URL
+    DATABASE_ECHO = DATABASE_ECHO
+    USE_EMAIL = USE_EMAIL
+    EMAIL_ADDRESS = EMAIL_ADDRESS
+    EMAIL_PASSWORD = EMAIL_PASSWORD
+    SMTP_SERVER = SMTP_SERVER
+    SMTP_PORT = SMTP_PORT
+    # Provide as comma-separated string for backward compatibility with notifiers
+    EMAIL_RECIPIENTS = os.getenv("EMAIL_RECIPIENTS", "")
+    USE_LINE = USE_LINE
+    LINE_NOTIFY_TOKEN = LINE_NOTIFY_TOKEN
+    SCHEDULE_TODAY = SCHEDULE_TODAY
+    SCHEDULE_TOMORROW = SCHEDULE_TOMORROW
+    SCHEDULE_EVALUATE = SCHEDULE_EVALUATE
+    CONFIDENCE_THRESHOLD = CONFIDENCE_THRESHOLD
+    HIGH_CONFIDENCE_RACES = HIGH_CONFIDENCE_RACES
+    HIGH_ODDS_RACES = HIGH_ODDS_RACES
+    ENVIRONMENT = ENVIRONMENT
+    DEBUG = DEBUG
+    LOG_LEVEL = LOG_LEVEL
