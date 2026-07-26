@@ -9,6 +9,7 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.exc import SQLAlchemyError
 
 import config
 from utils.logger import logger
@@ -29,24 +30,41 @@ class DatabaseManager:
             database_url: Database connection URL
         """
         self.database_url = database_url
-        
-        # Create engine
-        if database_url.startswith("sqlite"):
-            # SQLite configuration
-            self.engine = create_engine(
-                database_url,
-                connect_args={"check_same_thread": False},
-                poolclass=StaticPool,
-            )
-        else:
-            # Other databases
-            self.engine = create_engine(database_url, pool_pre_ping=True)
+        self.engine = self._create_engine_with_fallback(database_url)
         
         # Create session factory
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         
         # Initialize database
         self._init_db()
+
+    def _create_engine_with_fallback(self, database_url: str):
+        """Create DB engine and fallback to SQLite on connection error."""
+        if database_url.startswith("sqlite"):
+            return create_engine(
+                database_url,
+                connect_args={"check_same_thread": False},
+                poolclass=StaticPool,
+            )
+
+        try:
+            engine = create_engine(database_url, pool_pre_ping=True)
+            with engine.connect():
+                pass
+            return engine
+        except (SQLAlchemyError, ModuleNotFoundError, ImportError) as exc:
+            fallback_url = "sqlite:///boat_race_predictor.db"
+            logger.warning(
+                "Primary DB connection failed (%s). Falling back to SQLite: %s",
+                exc,
+                fallback_url,
+            )
+            self.database_url = fallback_url
+            return create_engine(
+                fallback_url,
+                connect_args={"check_same_thread": False},
+                poolclass=StaticPool,
+            )
     
     def _init_db(self):
         """Initialize database tables"""

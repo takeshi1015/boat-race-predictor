@@ -24,16 +24,18 @@ def main():
     parser.add_argument(
         "--mode",
         choices=[
+            "help",
             "run",
             "predict-today",
             "predict-tomorrow",
             "analyze",
             "retrain",
+            "stats",
             "predict",
             "web",
             "api",
         ],
-        default="run",
+        default="help",
         help=(
             "Operation mode: "
             "'run' starts the continuous scheduler, "
@@ -73,6 +75,10 @@ def main():
     try:
         if args.mode == "run":
             _run_scheduler()
+        elif args.mode == "help":
+            _print_startup_guide()
+            _predict_today()
+            _predict_tomorrow()
         elif args.mode == "predict-today":
             _predict_today()
         elif args.mode == "predict-tomorrow":
@@ -81,6 +87,8 @@ def main():
             _analyze_performance()
         elif args.mode == "retrain":
             _retrain_models()
+        elif args.mode == "stats":
+            _show_stats()
         elif args.mode == "predict":
             _run_all_models_demo(export=args.export)
         elif args.mode in ("web", "api"):
@@ -242,6 +250,37 @@ def _retrain_models():
     logger.info("Model retraining completed")
 
 
+def _show_stats():
+    """Show summary statistics."""
+    logger.info("Showing prediction statistics")
+    _get_scheduler()._run_stats_display()
+    logger.info("Statistics display completed")
+
+
+def _print_startup_guide():
+    print(
+        "========================================\n"
+        "ボートレース予測システム v1.0\n"
+        "========================================\n\n"
+        "【起動方法】\n"
+        "1. 当日の予想を見る\n"
+        "   python main.py --mode predict-today\n\n"
+        "2. 翌日の予想を見る\n"
+        "   python main.py --mode predict-tomorrow\n\n"
+        "3. 的中率を分析する\n"
+        "   python main.py --mode analyze\n\n"
+        "4. 学習を実行する\n"
+        "   python main.py --mode retrain\n\n"
+        "5. 統計情報を表示\n"
+        "   python main.py --mode stats\n\n"
+        "【説明】\n"
+        "- 信頼度 0.7 以上が購入可能な予想です\n"
+        "- 毎日自動的に前日の結果から学習します\n"
+        "- 的中率は徐々に向上します\n"
+        "========================================"
+    )
+
+
 def _run_web_server() -> None:
     """Start the Flask web server on localhost:5000.
 
@@ -361,4 +400,3 @@ def _run_all_models_demo(export: Optional[Literal["json", "csv", "all"]] = None)
 
 if __name__ == "__main__":
     main()
-

@@ -301,4 +301,28 @@ pytest tests/test_models.py -v
 
 ---
 
+## ✅ 最新の最小実行手順（SQLite）
+
+```bash
+python scripts/init_db.py
+python scripts/init_test_data.py
+python main.py
+python main.py --mode predict-today
+python main.py --mode predict-tomorrow
+python main.py --mode analyze
+python main.py --mode retrain
+python main.py --mode stats
+```
+
+補助スクリプト:
+
+```bash
+python scripts/predict_today.py
+python scripts/predict_tomorrow.py
+python scripts/analyze_performance.py
+python scripts/retrain_model.py
+python scripts/stats_display.py
+python scripts/verify_app.py
+```
+
 **最終更新**: 2026年7月23日
