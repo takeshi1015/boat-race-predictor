@@ -21,13 +21,13 @@ def test_seed_today_races_adds_today_records(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     inserted = seed_today_races()
-    assert 3 <= inserted <= 5
+    assert inserted == 4
 
     db = DatabaseManager("sqlite:///./boat_race.db")
     session = db.get_session()
     try:
         races = db.get_races_by_date(session, datetime.now())
-        assert len(races) >= inserted
+        assert len(races) == inserted
     finally:
         session.close()
         db.close()

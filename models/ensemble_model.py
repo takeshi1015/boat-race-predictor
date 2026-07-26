@@ -5,18 +5,30 @@
 
 import logging
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from database.db_manager import get_db_manager
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
+
+UNKNOWN_CONDITION = "unknown"
+
+
+class _PassthroughScaler:
+    """No-op scaler kept for API compatibility in the ensemble model."""
+
+    def fit(self, values):
+        return self
+
+    def transform(self, values):
+        return values
 
 
 class EnsembleModel:
     """複数モデルのアンサンブル予測"""
     
     def __init__(self):
-        self.scaler = None
+        self.scaler = _PassthroughScaler()
         self.models = {}
         self.model_weights = {
             'neural_network': 0.4,
@@ -102,7 +114,6 @@ class EnsembleModel:
         try:
             target_date = datetime.now()
             if period == 'tomorrow':
-                from datetime import timedelta
                 target_date = target_date + timedelta(days=1)
 
             db_manager = get_db_manager()
@@ -111,14 +122,15 @@ class EnsembleModel:
                 rows = db_manager.get_races_by_date(session, target_date)
                 races = []
                 for row in rows:
+                    weather = getattr(row, 'weather', None)
                     races.append({
                         'race_id': row.race_id,
                         'date': row.date.isoformat() if row.date else "",
                         'place': row.venue,
                         'race_number': row.race_number,
-                        'weather': 'unknown',
-                        'water_condition': row.water_surface or 'unknown',
-                        'start_time_hour': 0,
+                        'weather': weather if weather is not None else UNKNOWN_CONDITION,
+                        'water_condition': row.water_surface or UNKNOWN_CONDITION,
+                        'start_time_hour': row.date.hour if row.date else 0,
                     })
                 return races
             finally:

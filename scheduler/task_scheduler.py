@@ -4,9 +4,11 @@ APSchedulerを使用して、定期的なタスクをスケジュール・実行
 """
 
 from datetime import datetime
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-import config
+
+from config import Config
 from models.ensemble_model import EnsembleModel
 from notifiers.email_notifier import EmailNotifier
 from utils.logger import setup_logger
@@ -19,7 +21,7 @@ class TaskScheduler:
     
     def __init__(self):
         self.scheduler = BackgroundScheduler()
-        self.config = config.Config()
+        self.config = Config()
         self.model = EnsembleModel()
         self.email_notifier = EmailNotifier() if self.config.USE_EMAIL else None
         
@@ -115,19 +117,6 @@ class TaskScheduler:
     def evaluate_performance(self):
         """パフォーマンスを評価"""
         logger.info("=" * 60)
-
-    # Backward compatibility with main.py command handlers
-    def _run_today_prediction(self):
-        self.predict_today()
-
-    def _run_tomorrow_prediction(self):
-        self.predict_tomorrow()
-
-    def _run_performance_analysis(self):
-        self.evaluate_performance()
-
-    def _run_model_retraining(self):
-        logger.warning("モデル再学習は未実装のためスキップします")
         logger.info("パフォーマンス評価タスクを開始")
         try:
             metrics = self.model.evaluate_performance()
@@ -143,6 +132,19 @@ class TaskScheduler:
         except Exception as e:
             logger.error(f"パフォーマンス評価エラー: {e}", exc_info=True)
         logger.info("=" * 60)
+
+    # Backward compatibility with main.py command handlers
+    def _run_today_prediction(self):
+        self.predict_today()
+
+    def _run_tomorrow_prediction(self):
+        self.predict_tomorrow()
+
+    def _run_performance_analysis(self):
+        self.evaluate_performance()
+
+    def _run_model_retraining(self):
+        logger.warning("モデル再学習は未実装のためスキップします")
     
     def _notify_predictions(self, predictions, title):
         """予測結果を通知"""
