@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from config import Config
+import config
 from models.ensemble_model import EnsembleModel
 from notifiers.email_notifier import EmailNotifier
 from utils.logger import setup_logger
@@ -21,7 +21,7 @@ class TaskScheduler:
     
     def __init__(self):
         self.scheduler = BackgroundScheduler()
-        self.config = Config()
+        self.config = config
         self.model = EnsembleModel()
         self.email_notifier = EmailNotifier() if self.config.USE_EMAIL else None
         

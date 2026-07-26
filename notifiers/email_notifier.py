@@ -7,7 +7,7 @@ import smtplib
 import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from config import Config
+import config
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -17,12 +17,12 @@ class EmailNotifier:
     """メール通知クラス"""
     
     def __init__(self):
-        self.config = Config()
+        self.config = config
         self.sender_email = self.config.EMAIL_ADDRESS
         self.sender_password = self.config.EMAIL_PASSWORD
         self.smtp_server = self.config.SMTP_SERVER
         self.smtp_port = self.config.SMTP_PORT
-        self.recipients = self.config.EMAIL_RECIPIENTS.split(',')
+        self.recipients = self.config.EMAIL_RECIPIENTS if isinstance(self.config.EMAIL_RECIPIENTS, list) else self.config.EMAIL_RECIPIENTS.split(',')
     
     def send_predictions(self, predictions, title="予測結果"):
         """予測結果をメール送信"""

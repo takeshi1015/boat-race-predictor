@@ -5,7 +5,7 @@ LINE Notify経由でLINEメッセージを送信
 
 import requests
 import logging
-from config import Config
+import config
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -17,7 +17,7 @@ class LineNotifier:
     LINE_NOTIFY_URL = "https://notify-api.line.me/api/notify"
     
     def __init__(self):
-        self.config = Config()
+        self.config = config
         self.access_token = self.config.LINE_NOTIFY_TOKEN
         self.headers = {
             'Authorization': f'Bearer {self.access_token}',
