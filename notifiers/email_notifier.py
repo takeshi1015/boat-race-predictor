@@ -22,7 +22,10 @@ class EmailNotifier:
         self.sender_password = self.config.EMAIL_PASSWORD
         self.smtp_server = self.config.SMTP_SERVER
         self.smtp_port = self.config.SMTP_PORT
-        self.recipients = self.config.EMAIL_RECIPIENTS.split(',')
+        if isinstance(self.config.EMAIL_RECIPIENTS, list):
+            self.recipients = self.config.EMAIL_RECIPIENTS
+        else:
+            self.recipients = str(self.config.EMAIL_RECIPIENTS).split(',')
     
     def send_predictions(self, predictions, title="予測結果"):
         """予測結果をメール送信"""

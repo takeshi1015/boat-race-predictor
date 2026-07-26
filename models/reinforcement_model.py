@@ -3,13 +3,15 @@
 from collections import defaultdict
 from typing import Dict
 
+import config
+
 
 class ReinforcementModel:
     """Maintain lane rewards by condition and apply score adjustments."""
 
     def __init__(self):
         self._q = defaultdict(lambda: defaultdict(float))
-        self.alpha = 0.15
+        self.alpha = config.Q_LEARNING_ALPHA
 
     def adjust(self, race, scores: Dict[int, float]) -> Dict[int, float]:
         key = self._state_key(race)

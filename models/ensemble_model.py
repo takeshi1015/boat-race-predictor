@@ -14,6 +14,22 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# Weight tuning constants used by weekly self-learning.
+# - HIT_RATE_THRESHOLD: boundary between "decrease NN bias" and "increase NN bias"
+# - *_MIN/*_MAX: keep each model weight inside stable bounds
+# - WEIGHT_*: step size for each weekly update
+HIT_RATE_THRESHOLD = 0.4
+WEIGHT_DOWN = 0.05
+WEIGHT_UP_MEDIUM = 0.03
+WEIGHT_UP_SMALL = 0.02
+WEIGHT_DOWN_SMALL = 0.01
+NN_MIN = 0.25
+NN_MAX = 0.5
+XGB_MIN = 0.25
+XGB_MAX = 0.45
+RF_MIN = 0.2
+RF_MAX = 0.35
+
 
 class EnsembleModel:
     """統計 + 機械学習 + 強化学習の簡易アンサンブル."""
@@ -188,18 +204,39 @@ class EnsembleModel:
         recent = session.query(Prediction).filter(Prediction.prediction_date >= cutoff).all()
         if not recent:
             return
-        hit_rate = sum(1 for p in recent if (p.result or {}).get("is_hit")) / len(recent)
-        if hit_rate < 0.4:
-            self.model_weights["neural_network"] = max(0.25, self.model_weights["neural_network"] - 0.05)
-            self.model_weights["xgboost"] = min(0.45, self.model_weights["xgboost"] + 0.03)
-            self.model_weights["random_forest"] = min(0.35, self.model_weights["random_forest"] + 0.02)
+        race_ids = [p.race_id for p in recent]
+        races = {
+            race.race_id: race
+            for race in session.query(Race).filter(Race.race_id.in_(race_ids)).all()
+        }
+        hits = 0
+        for pred in recent:
+            race = races.get(pred.race_id)
+            if not race or not race.result:
+                continue
+            winner = int((race.result or {}).get("1st", 0) or 0)
+            predicted = int((pred.predicted_order or [0])[0] or 0)
+            if winner == predicted:
+                hits += 1
+        total_recent = max(len(recent), 1)
+        hit_rate = hits / total_recent
+        if hit_rate < HIT_RATE_THRESHOLD:
+            self.model_weights["neural_network"] = max(NN_MIN, self.model_weights["neural_network"] - WEIGHT_DOWN)
+            self.model_weights["xgboost"] = min(XGB_MAX, self.model_weights["xgboost"] + WEIGHT_UP_MEDIUM)
+            self.model_weights["random_forest"] = min(RF_MAX, self.model_weights["random_forest"] + WEIGHT_UP_SMALL)
         else:
-            self.model_weights["neural_network"] = min(0.5, self.model_weights["neural_network"] + 0.02)
-            self.model_weights["xgboost"] = max(0.25, self.model_weights["xgboost"] - 0.01)
-            self.model_weights["random_forest"] = max(0.2, self.model_weights["random_forest"] - 0.01)
+            self.model_weights["neural_network"] = min(NN_MAX, self.model_weights["neural_network"] + WEIGHT_UP_SMALL)
+            self.model_weights["xgboost"] = max(XGB_MIN, self.model_weights["xgboost"] - WEIGHT_DOWN_SMALL)
+            self.model_weights["random_forest"] = max(RF_MIN, self.model_weights["random_forest"] - WEIGHT_DOWN_SMALL)
         self._normalize_weights()
 
     def _normalize_weights(self):
         total = sum(self.model_weights.values()) or 1.0
-        for key in list(self.model_weights.keys()):
+        for key in self.model_weights:
             self.model_weights[key] = self.model_weights[key] / total
+        self.model_weights["neural_network"] = min(max(self.model_weights["neural_network"], NN_MIN), NN_MAX)
+        self.model_weights["xgboost"] = min(max(self.model_weights["xgboost"], XGB_MIN), XGB_MAX)
+        self.model_weights["random_forest"] = min(max(self.model_weights["random_forest"], RF_MIN), RF_MAX)
+        total_after_clip = sum(self.model_weights.values()) or 1.0
+        for key in self.model_weights:
+            self.model_weights[key] = self.model_weights[key] / total_after_clip

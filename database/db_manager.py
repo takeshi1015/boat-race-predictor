@@ -53,9 +53,10 @@ class DatabaseManager:
                 pass
             return engine
         except (SQLAlchemyError, ModuleNotFoundError, ImportError) as exc:
-            fallback_url = "sqlite:///boat_race_predictor.db"
+            fallback_url = config.SQLITE_FALLBACK_URL
             logger.warning(
-                "Primary DB connection failed (%s). Falling back to SQLite: %s",
+                "Primary DB connection to %s failed (%s). Falling back to SQLite: %s",
+                database_url,
                 exc,
                 fallback_url,
             )

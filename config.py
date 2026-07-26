@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ==================== DATABASE ====================
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///boat_race_predictor.db")
+SQLITE_FALLBACK_URL = "sqlite:///boat_race_predictor.db"
+DATABASE_URL = os.getenv("DATABASE_URL", SQLITE_FALLBACK_URL)
 DATABASE_ECHO = os.getenv("DATABASE_ECHO", "False").lower() == "true"
 
 # ==================== EMAIL SETTINGS ====================
@@ -29,9 +30,12 @@ SCRAPER_RETRY_COUNT = int(os.getenv("SCRAPER_RETRY_COUNT", "3"))
 SCRAPER_RETRY_DELAY = int(os.getenv("SCRAPER_RETRY_DELAY", "5"))
 
 # ==================== PREDICTION SETTINGS ====================
+# Business rule: env override cannot lower this under 0.7
+# because predictions below 0.7 are not buy candidates.
+MIN_CONFIDENCE_THRESHOLD = 0.7
 HIGH_CONFIDENCE_RACES = int(os.getenv("HIGH_CONFIDENCE_RACES", "5"))
 HIGH_ODDS_RACES = int(os.getenv("HIGH_ODDS_RACES", "5"))
-CONFIDENCE_THRESHOLD = max(0.7, float(os.getenv("CONFIDENCE_THRESHOLD", "0.7")))
+CONFIDENCE_THRESHOLD = max(MIN_CONFIDENCE_THRESHOLD, float(os.getenv("CONFIDENCE_THRESHOLD", "0.7")))
 
 PREDICTION_WEIGHTS = {
     "statistical": 0.25,
@@ -93,7 +97,7 @@ class Config:
         self.EMAIL_PASSWORD = EMAIL_PASSWORD
         self.SMTP_SERVER = SMTP_SERVER
         self.SMTP_PORT = SMTP_PORT
-        self.EMAIL_RECIPIENTS = EMAIL_RECIPIENTS_RAW
+        self.EMAIL_RECIPIENTS = EMAIL_RECIPIENTS
         self.USE_LINE = USE_LINE
         self.LINE_NOTIFY_TOKEN = LINE_NOTIFY_TOKEN
         self.SCHEDULE_TODAY = SCHEDULE_TODAY

@@ -3,6 +3,9 @@
 from collections import defaultdict
 from typing import Dict, Iterable
 
+BASELINE_INNER_LANE_SCORE = 0.20
+LANE_SCORE_DECREMENT = 0.02
+
 
 class StatisticalLearningModel:
     """Learn lane tendency from historical results."""
@@ -27,11 +30,15 @@ class StatisticalLearningModel:
         for lane in range(1, 7):
             lane_data = lane_stats.get(lane, {"wins": 0, "total": 0})
             total = max(lane_data["total"], 1)
-            # Baseline favors inside lane a little when no history exists.
-            baseline = max(0.0, 0.20 - ((lane - 1) * 0.02))
+            baseline = self._baseline_score(lane)
             scores[lane] = (lane_data["wins"] / total) + baseline
         return scores
 
     @staticmethod
     def _condition_key(race) -> str:
         return f"{(race.wind_speed or 0)//3}:{race.water_surface or 'unknown'}:{race.time_of_day or 'unknown'}"
+
+    @staticmethod
+    def _baseline_score(lane: int) -> float:
+        # Baseline uses a small inside-lane bias when history is sparse.
+        return max(0.0, BASELINE_INNER_LANE_SCORE - ((lane - 1) * LANE_SCORE_DECREMENT))

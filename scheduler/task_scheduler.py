@@ -1,6 +1,6 @@
 """Task scheduler and CLI task runner."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -60,7 +60,7 @@ class TaskScheduler:
         logger.info("翌日予測タスクを開始")
         predictions = self.model.predict_tomorrow()
         self.model.save_prediction_records(predictions, "tomorrow")
-        tomorrow = datetime.now().date().fromordinal(datetime.now().date().toordinal() + 1)
+        tomorrow = datetime.now().date() + timedelta(days=1)
         self._print_predictions("翌日予想", tomorrow.isoformat(), predictions)
         logger.info("翌日予測完了: %dレース", len(predictions))
         logger.info("=" * 60)
@@ -100,7 +100,7 @@ class TaskScheduler:
         if not predictions:
             print("予測対象レースがありません。先に python scripts/init_test_data.py を実行してください。")
             return
-        purchasable = [p for p in predictions if p["confidence"] >= config.CONFIDENCE_THRESHOLD]
+        purchasable = [p for p in predictions if p["purchasable"]]
         print(f"購入可能予想(信頼度{config.CONFIDENCE_THRESHOLD:.1f}以上): {len(purchasable)}件\n")
         for pred in predictions:
             label = purchase_label(pred["confidence"], config.CONFIDENCE_THRESHOLD)

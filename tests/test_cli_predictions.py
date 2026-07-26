@@ -5,6 +5,7 @@ from datetime import datetime
 
 from database.db_manager import get_db_manager
 from database.models import Race
+from scripts.init_test_data import main as init_test_data_main
 from utils.statistics import purchase_label
 
 
@@ -14,7 +15,7 @@ def test_purchase_label_threshold():
 
 
 def test_init_test_data_creates_today_races():
-    subprocess.run(["python", "scripts/init_test_data.py"], check=True)
+    init_test_data_main()
     db = get_db_manager()
     session = db.get_session()
     try:
