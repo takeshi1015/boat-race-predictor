@@ -325,3 +325,136 @@ def health_check() -> Response:
         JSON object with status ``ok`` and a current timestamp.
     """
     return jsonify({"status": "ok", "timestamp": datetime.now().isoformat()})
+
+
+# ---------------------------------------------------------------------------
+# GET /api/races/today
+# ---------------------------------------------------------------------------
+@api_bp.route("/races/today", methods=["GET"])
+def get_today_races() -> Response:
+    """Return today's race predictions from the database.
+
+    Returns:
+        JSON array of race predictions.
+    """
+    try:
+        from models.ensemble_model import EnsembleModel
+        model = EnsembleModel()
+        predictions = model.predict_today()
+        return jsonify({
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "count": len(predictions),
+            "predictions": predictions,
+        })
+    except Exception as exc:
+        logger.error("Today race predictions failed: %s", exc, exc_info=True)
+        return jsonify({"error": str(exc), "predictions": []}), 500
+
+
+# ---------------------------------------------------------------------------
+# GET /api/races/tomorrow
+# ---------------------------------------------------------------------------
+@api_bp.route("/races/tomorrow", methods=["GET"])
+def get_tomorrow_races() -> Response:
+    """Return tomorrow's race predictions from the database.
+
+    Returns:
+        JSON array of race predictions.
+    """
+    try:
+        from datetime import timedelta
+        from models.ensemble_model import EnsembleModel
+        model = EnsembleModel()
+        predictions = model.predict_tomorrow()
+        tomorrow = datetime.now() + timedelta(days=1)
+        return jsonify({
+            "date": tomorrow.strftime("%Y-%m-%d"),
+            "count": len(predictions),
+            "predictions": predictions,
+        })
+    except Exception as exc:
+        logger.error("Tomorrow race predictions failed: %s", exc, exc_info=True)
+        return jsonify({"error": str(exc), "predictions": []}), 500
+
+
+# ---------------------------------------------------------------------------
+# GET /api/analysis
+# ---------------------------------------------------------------------------
+@api_bp.route("/analysis", methods=["GET"])
+def get_analysis() -> Response:
+    """Return performance analysis metrics.
+
+    Returns:
+        JSON object with accuracy, precision, recall, and other metrics.
+    """
+    try:
+        from models.ensemble_model import EnsembleModel
+        model = EnsembleModel()
+        metrics = model.evaluate_performance()
+        return jsonify({
+            "timestamp": datetime.now().isoformat(),
+            "period_days": 30,
+            "metrics": metrics,
+        })
+    except Exception as exc:
+        logger.error("Analysis failed: %s", exc, exc_info=True)
+        return jsonify({"error": str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# POST /api/retrain
+# ---------------------------------------------------------------------------
+@api_bp.route("/retrain", methods=["POST"])
+def post_retrain() -> Response:
+    """Trigger model retraining.
+
+    Returns:
+        JSON object with retraining results.
+    """
+    try:
+        from models.ensemble_model import EnsembleModel
+        model = EnsembleModel()
+        result = model.retrain()
+        return jsonify({
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "result": result,
+        })
+    except Exception as exc:
+        logger.error("Retraining failed: %s", exc, exc_info=True)
+        return jsonify({"error": str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# GET /api/stats
+# ---------------------------------------------------------------------------
+@api_bp.route("/stats", methods=["GET"])
+def get_stats() -> Response:
+    """Return overall statistics.
+
+    Returns:
+        JSON object with hit rate, recovery rate, and total predictions.
+    """
+    try:
+        from database.db_manager import get_db_manager
+        from database.models import Prediction
+        db = get_db_manager()
+        session = db.get_session()
+        try:
+            hit_rate_30 = db.calculate_hit_rate(session, days=30)
+            hit_rate_7 = db.calculate_hit_rate(session, days=7)
+            recovery_rate = db.calculate_recovery_rate(session, days=30)
+            total = session.query(Prediction).count()
+            return jsonify({
+                "timestamp": datetime.now().isoformat(),
+                "hit_rate_30d": round(hit_rate_30, 4),
+                "hit_rate_7d": round(hit_rate_7, 4),
+                "recovery_rate_30d": round(recovery_rate, 4),
+                "total_predictions": total,
+            })
+        finally:
+            session.close()
+    except Exception as exc:
+        logger.error("Stats failed: %s", exc, exc_info=True)
+        return jsonify({"error": str(exc)}), 500
+

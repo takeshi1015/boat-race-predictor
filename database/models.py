@@ -65,6 +65,7 @@ class Race(Base):
     id = Column(Integer, primary_key=True, index=True)
     race_id = Column(String, unique=True, index=True)
     venue = Column(String, index=True)
+    place = Column(String, index=True)  # 日本語会場名 (e.g. 桐生, 戸田)
     date = Column(DateTime, index=True)
     race_number = Column(Integer)
     race_grade = Column(String)  # G1, G2, G3, etc.
@@ -74,13 +75,16 @@ class Race(Base):
     wind_speed = Column(Float, default=0.0)
     wind_direction = Column(String)
     water_surface = Column(String)  # calm, slightly_rough, rough
+    weather = Column(String)        # sunny, cloudy, rainy
+    water_condition = Column(String)  # calm, slight, moderate, rough
     temperature = Column(Float, default=0.0)
     humidity = Column(Float, default=0.0)
     tide = Column(String)
     
     # Race info
     number_of_boats = Column(Integer, default=6)
-    time_of_day = Column(String)  # morning, midday, evening
+    time_of_day = Column(String)    # morning, midday, evening
+    start_time_hour = Column(Integer, default=0)  # 開始時刻（時）
     
     # Results
     result = Column(JSON)  # {1st: player_id, 2nd: player_id, 3rd: player_id}

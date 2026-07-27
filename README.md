@@ -148,16 +148,27 @@ NN_DROPOUT_RATE=0.3
 
 ## 💻 使用方法
 
-### 1. 連続実行モード（デフォルト）
+### 初回セットアップ
 ```bash
-python main.py --mode run
+python scripts/init_test_data.py
 ```
-スケジューラーが起動し、設定された時間に自動的にタスクを実行します。
+テストデータを生成します（当日6件以上、過去30日間の履歴データ）。
+
+### 動作確認
+```bash
+python scripts/verify_app.py
+```
+
+### 1. 起動方法を表示
+```bash
+python main.py
+```
 
 ### 2. 当日予測を即座に実行
 ```bash
 python main.py --mode predict-today
 ```
+購入可能な予想（信頼度 70%以上）を含む当日の全予想を表示します。
 
 ### 3. 翌日予測を即座に実行
 ```bash
@@ -173,6 +184,30 @@ python main.py --mode analyze
 ```bash
 python main.py --mode retrain
 ```
+
+### 6. 統計情報を表示
+```bash
+python main.py --mode stats
+```
+
+### 7. Web UI を起動（ブラウザからアクセス）
+```bash
+python main.py --mode run-server
+# → http://localhost:5000/ でアクセス可能
+```
+
+Web UI 機能：
+- ダッシュボード（統計情報表示）
+- 当日予想表示（レスポンシブ）
+- 翌日予想表示
+- 的中率分析
+- 設定画面
+
+### 8. 連続実行モード（スケジューラー）
+```bash
+python main.py --mode run
+```
+スケジューラーが起動し、設定された時間に自動的にタスクを実行します。
 
 ### デバッグモード
 ```bash

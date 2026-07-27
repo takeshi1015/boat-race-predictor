@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}翌日予想 - ボートレース予測システム{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+  <div class="col">
+    <h2 class="fw-bold"><i class="bi bi-calendar2-plus me-2 text-primary"></i>翌日予想</h2>
+    <p class="text-muted mb-0" id="tomorrow-date">読み込み中…</p>
+  </div>
+  <div class="col-auto">
+    <button id="btn-refresh" class="btn btn-outline-primary btn-sm" onclick="loadPredictions()">
+      <i class="bi bi-arrow-clockwise me-1"></i>更新
+    </button>
+  </div>
+</div>
+
+<!-- 予想カード一覧 -->
+<div id="prediction-cards" class="row g-3 mb-4">
+  <div class="col-12 text-center py-5 text-muted">
+    <div class="spinner-border" role="status"></div>
+    <p class="mt-2">翌日予想を読み込んでいます…</p>
+  </div>
+</div>
+
+<p class="text-end text-muted small">最終更新: <span id="last-updated">-</span></p>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+const CONFIDENCE_THRESHOLD = 0.7;
+
+function starsHtml(confidence) {
+  const filled = Math.round(confidence * 5);
+  return "⭐".repeat(filled) + "☆".repeat(5 - filled);
+}
+
+function badgeClass(confidence) {
+  if (confidence >= 0.8) return "bg-success";
+  if (confidence >= 0.7) return "bg-primary";
+  if (confidence >= 0.6) return "bg-warning text-dark";
+  return "bg-secondary";
+}
+
+function labelText(confidence) {
+  return confidence >= CONFIDENCE_THRESHOLD ? "購入可能" : "参考情報";
+}
+
+async function loadPredictions() {
+  const container = document.getElementById("prediction-cards");
+  container.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
+
+  try {
+    const res = await fetch("/api/races/tomorrow");
+    const data = await res.json();
+
+    document.getElementById("tomorrow-date").textContent = data.date ? `${data.date}（翌日）` : "";
+    document.getElementById("last-updated").textContent = new Date().toLocaleString("ja-JP");
+
+    const predictions = data.predictions || [];
+
+    if (predictions.length === 0) {
+      container.innerHTML = `
+        <div class="col-12">
+          <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            翌日のレースデータがありません。<br>
+            <code>python scripts/init_test_data.py</code> を実行してテストデータを追加してください。
+          </div>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = "";
+    predictions.forEach(pred => {
+      const order = (pred.predicted_order || []).join("-") || "-";
+      const conf = pred.confidence || 0;
+      const confPct = (conf * 100).toFixed(1);
+      const card = document.createElement("div");
+      card.className = "col-md-6 col-lg-4";
+      card.innerHTML = `
+        <div class="card shadow-sm h-100 ${conf >= CONFIDENCE_THRESHOLD ? 'border-primary' : ''}">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
+            <span class="badge bg-secondary">${pred.race_number}レース</span>
+          </div>
+          <div class="card-body">
+            <div class="text-center mb-3">
+              <span class="display-6 fw-bold text-primary">${order}</span>
+              <p class="text-muted small mb-0">推奨買い目</p>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="text-muted small">信頼度</span>
+              <span class="badge ${badgeClass(conf)}">${labelText(conf)}</span>
+            </div>
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <span class="text-warning">${starsHtml(conf)}</span>
+              <span class="fw-bold">${confPct}%</span>
+            </div>
+            <div class="progress mb-3" style="height:8px">
+              <div class="progress-bar ${conf >= CONFIDENCE_THRESHOLD ? 'bg-primary' : 'bg-secondary'}"
+                   style="width:${confPct}%"></div>
+            </div>
+            ${pred.reason ? `<p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>${pred.reason}</p>` : ""}
+          </div>
+        </div>`;
+      container.appendChild(card);
+    });
+  } catch (e) {
+    container.innerHTML = `<div class="col-12"><div class="alert alert-danger">データの読み込みに失敗しました: ${e.message}</div></div>`;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", loadPredictions);
+</script>
+{% endblock %}

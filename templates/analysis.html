@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}分析 - ボートレース予測システム{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+  <div class="col">
+    <h2 class="fw-bold"><i class="bi bi-bar-chart-line me-2 text-primary"></i>的中率分析</h2>
+    <p class="text-muted mb-0">過去30日間の予測パフォーマンスを分析します。</p>
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-outline-primary btn-sm" onclick="loadAnalysis()">
+      <i class="bi bi-arrow-clockwise me-1"></i>更新
+    </button>
+    <button class="btn btn-success btn-sm ms-2" onclick="triggerRetrain()">
+      <i class="bi bi-cpu me-1"></i>再学習実行
+    </button>
+  </div>
+</div>
+
+<!-- 統計カード -->
+<div class="row g-3 mb-4" id="stats-cards">
+  <div class="col-12 text-center py-5 text-muted">
+    <div class="spinner-border" role="status"></div>
+    <p class="mt-2">分析データを読み込んでいます…</p>
+  </div>
+</div>
+
+<!-- 分析グラフ -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-pie-chart-fill me-2 text-success"></i>的中・不的中割合
+      </div>
+      <div class="card-body">
+        <canvas id="hit-miss-chart" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-graph-up-arrow me-2 text-primary"></i>モデル指標
+      </div>
+      <div class="card-body">
+        <canvas id="metrics-chart" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 再学習結果 -->
+<div id="retrain-result" class="d-none">
+  <div class="card shadow-sm mb-4 border-success">
+    <div class="card-header fw-semibold text-success">
+      <i class="bi bi-check-circle me-2"></i>再学習完了
+    </div>
+    <div class="card-body" id="retrain-body"></div>
+  </div>
+</div>
+
+<p class="text-end text-muted small">最終更新: <span id="last-updated">-</span></p>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+let hitMissChart = null;
+let metricsChart = null;
+
+async function loadAnalysis() {
+  const container = document.getElementById("stats-cards");
+  container.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p>読み込み中…</p></div>`;
+
+  try {
+    const res = await fetch("/api/analysis");
+    const data = await res.json();
+    const m = data.metrics || {};
+    document.getElementById("last-updated").textContent = new Date().toLocaleString("ja-JP");
+
+    const hitRate = ((m.accuracy || 0) * 100).toFixed(1);
+    const recovery = ((m.recovery_rate || 0) * 100).toFixed(1);
+    const total = m.total_predictions || 0;
+    const hits = m.hits || 0;
+    const misses = m.misses || 0;
+
+    container.innerHTML = `
+      <div class="col-sm-6 col-lg-3">
+        <div class="card text-center border-success shadow-sm">
+          <div class="card-body">
+            <i class="bi bi-bullseye fs-2 text-success mb-2"></i>
+            <h3 class="fw-bold text-success">${hitRate}%</h3>
+            <p class="text-muted mb-0">的中率（30日）</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card text-center border-primary shadow-sm">
+          <div class="card-body">
+            <i class="bi bi-cash-stack fs-2 text-primary mb-2"></i>
+            <h3 class="fw-bold text-primary">${recovery}%</h3>
+            <p class="text-muted mb-0">回収率</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card text-center border-info shadow-sm">
+          <div class="card-body">
+            <i class="bi bi-trophy fs-2 text-info mb-2"></i>
+            <h3 class="fw-bold text-info">${hits}</h3>
+            <p class="text-muted mb-0">的中数</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card text-center border-secondary shadow-sm">
+          <div class="card-body">
+            <i class="bi bi-list-check fs-2 text-secondary mb-2"></i>
+            <h3 class="fw-bold">${total}</h3>
+            <p class="text-muted mb-0">総レース数</p>
+          </div>
+        </div>
+      </div>`;
+
+    // 的中・不的中グラフ
+    const ctx1 = document.getElementById("hit-miss-chart").getContext("2d");
+    if (hitMissChart) hitMissChart.destroy();
+    hitMissChart = new Chart(ctx1, {
+      type: "doughnut",
+      data: {
+        labels: ["的中", "不的中"],
+        datasets: [{
+          data: [hits, misses],
+          backgroundColor: ["#198754", "#dc3545"],
+        }],
+      },
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+    });
+
+    // モデル指標グラフ
+    const ctx2 = document.getElementById("metrics-chart").getContext("2d");
+    if (metricsChart) metricsChart.destroy();
+    metricsChart = new Chart(ctx2, {
+      type: "bar",
+      data: {
+        labels: ["的中率", "適合率", "再現率"],
+        datasets: [{
+          label: "スコア (%)",
+          data: [
+            ((m.accuracy || 0) * 100).toFixed(1),
+            ((m.precision || 0) * 100).toFixed(1),
+            ((m.recall || 0) * 100).toFixed(1),
+          ],
+          backgroundColor: ["#0d6efd", "#198754", "#ffc107"],
+        }],
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + "%" } } },
+      },
+    });
+  } catch (e) {
+    container.innerHTML = `<div class="col-12"><div class="alert alert-danger">データの読み込みに失敗しました: ${e.message}</div></div>`;
+  }
+}
+
+async function triggerRetrain() {
+  const btn = event.target.closest("button");
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>学習中…`;
+
+  try {
+    const res = await fetch("/api/retrain", { method: "POST" });
+    const data = await res.json();
+    const resultDiv = document.getElementById("retrain-result");
+    const body = document.getElementById("retrain-body");
+    resultDiv.classList.remove("d-none");
+    const r = data.result || {};
+    body.innerHTML = Object.entries(r).map(([k, v]) => `<p class="mb-1"><strong>${k}:</strong> ${v}</p>`).join("") || "再学習が完了しました。";
+    await loadAnalysis();
+  } catch (e) {
+    alert("再学習エラー: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<i class="bi bi-cpu me-1"></i>再学習実行`;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", loadAnalysis);
+</script>
+{% endblock %}

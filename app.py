@@ -39,10 +39,30 @@ def create_app() -> Flask:
         """Main dashboard page."""
         return render_template("dashboard.html")
 
+    @app.route("/predictions/today")
+    def predictions_today() -> str:
+        """Today's predictions page."""
+        return render_template("predictions_today.html")
+
+    @app.route("/predictions/tomorrow")
+    def predictions_tomorrow() -> str:
+        """Tomorrow's predictions page."""
+        return render_template("predictions_tomorrow.html")
+
+    @app.route("/analysis")
+    def analysis() -> str:
+        """Analysis page."""
+        return render_template("analysis.html")
+
     @app.route("/results")
     def results() -> str:
         """Detailed results page."""
         return render_template("results.html")
+
+    @app.route("/settings")
+    def settings() -> str:
+        """Settings page."""
+        return render_template("settings.html")
 
     @app.route("/api-docs")
     def api_docs() -> str:
