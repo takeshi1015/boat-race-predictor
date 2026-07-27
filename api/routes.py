@@ -415,10 +415,12 @@ def post_retrain() -> Response:
         from models.ensemble_model import EnsembleModel
         model = EnsembleModel()
         result = model.retrain()
+        # Remove any internal error keys before sending to client
+        safe_result = {k: v for k, v in result.items() if k != "エラー"}
         return jsonify({
             "status": "ok",
             "timestamp": datetime.now().isoformat(),
-            "result": result,
+            "result": safe_result,
         })
     except Exception as exc:
         logger.error("Retraining failed: %s", exc, exc_info=True)

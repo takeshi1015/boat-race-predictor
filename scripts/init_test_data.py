@@ -56,7 +56,7 @@ def _make_race(date: datetime, venue: str, race_number: int, hour: int) -> dict:
 
 def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: float) -> dict:
     predicted_order = [1, 2, 3] if is_hit else [2, 3, 1]
-    # 実際のオッズは的中・不的中に関わらず設定（実際のレース結果に基づく）
+    # 実際のオッズはランダムに生成（テスト用シミュレーションデータ）
     actual_odds = round(random.uniform(2.0, 50.0), 1)
     return {
         "race_id": race_id,
