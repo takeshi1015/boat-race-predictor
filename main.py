@@ -79,6 +79,8 @@ def main():
             _print_startup_guide()
             _predict_today()
             _predict_tomorrow()
+            _analyze_performance()
+            _show_stats()
         elif args.mode == "predict-today":
             _predict_today()
         elif args.mode == "predict-tomorrow":
