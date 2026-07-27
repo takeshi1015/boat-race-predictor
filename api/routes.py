@@ -11,6 +11,7 @@ from typing import Any, Dict
 
 from flask import Response, jsonify, request
 
+import config
 from api import api_bp
 from api.utils import (
     load_history,
