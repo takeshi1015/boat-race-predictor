@@ -11,6 +11,7 @@ from typing import Any, Dict
 
 from flask import Response, jsonify, request
 
+import config
 from api import api_bp
 from api.utils import (
     load_history,
@@ -20,6 +21,7 @@ from api.utils import (
     save_results_json,
 )
 from main import run_all_predictions
+from models.ensemble_model import EnsembleModel
 from utils.logger import logger
 
 # ---------------------------------------------------------------------------
@@ -325,3 +327,42 @@ def health_check() -> Response:
         JSON object with status ``ok`` and a current timestamp.
     """
     return jsonify({"status": "ok", "timestamp": datetime.now().isoformat()})
+
+
+# ---------------------------------------------------------------------------
+# POST /api/learning/auto
+# ---------------------------------------------------------------------------
+@api_bp.route("/learning/auto", methods=["POST"])
+def run_auto_learning() -> Response:
+    """Run one auto-learning cycle (analysis -> retrain -> re-evaluate)."""
+    body = request.get_json(silent=True) or {}
+    days = int(body.get("days", 30))
+    if days <= 0:
+        return jsonify({"error": "'days' must be a positive integer"}), 400
+    model = EnsembleModel()
+    result = model.auto_learning_cycle(days=days)
+    return jsonify(result), 200
+
+
+# ---------------------------------------------------------------------------
+# GET /api/learning/status
+# ---------------------------------------------------------------------------
+@api_bp.route("/learning/status", methods=["GET"])
+def get_learning_status() -> Response:
+    """Get current learning status without retraining."""
+    days_raw = request.args.get("days", "30")
+    try:
+        days = int(days_raw)
+    except ValueError:
+        return jsonify({"error": "'days' must be an integer"}), 400
+    if days <= 0:
+        return jsonify({"error": "'days' must be a positive integer"}), 400
+    model = EnsembleModel()
+    performance = model.evaluate_performance(days=days)
+    return jsonify({
+        "days": days,
+        "auto_learning_enabled": config.AUTO_LEARNING_ENABLED,
+        "schedule_retrain": config.SCHEDULE_RETRAIN,
+        "performance": performance,
+        "timestamp": datetime.now().isoformat(),
+    }), 200

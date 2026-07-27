@@ -32,6 +32,13 @@ def test_dashboard_loads(client):
     assert response.status_code == 200
 
 
+def test_api_docs_uses_request_base_url(client):
+    """GET /api-docs should display API base URL based on request host."""
+    response = client.get("/api-docs", base_url="http://10.0.0.5:5000")
+    assert response.status_code == 200
+    assert "http://10.0.0.5:5000/api" in response.get_data(as_text=True)
+
+
 # ---------------------------------------------------------------------------
 # API endpoints
 # ---------------------------------------------------------------------------
@@ -128,6 +135,42 @@ def test_post_predict_invalid_body(client):
     response = client.post(
         "/api/predict",
         data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+
+
+def test_learning_status(client):
+    """GET /api/learning/status should return current learning status."""
+    response = client.get("/api/learning/status")
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert "auto_learning_enabled" in data
+    assert "schedule_retrain" in data
+    assert "performance" in data
+    assert "timestamp" in data
+
+
+def test_run_auto_learning(client):
+    """POST /api/learning/auto should run one learning cycle."""
+    response = client.post(
+        "/api/learning/auto",
+        data=json.dumps({"days": 30}),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert "before" in data
+    assert "retrain" in data
+    assert "after" in data
+    assert "actions" in data
+
+
+def test_run_auto_learning_invalid_days(client):
+    """POST /api/learning/auto should validate days > 0."""
+    response = client.post(
+        "/api/learning/auto",
+        data=json.dumps({"days": 0}),
         content_type="application/json",
     )
     assert response.status_code == 400

@@ -2,6 +2,74 @@
 
 自動ボートレース予測システム - 機械学習と強化学習を組み合わせた高精度予測ツール
 
+---
+
+## 🚀 はじめての方はこちら（初心者向けクイックスタート）
+
+### ステップ1：Pythonのインストール（まだの場合）
+
+1. ブラウザで https://www.python.org/downloads/ を開く
+2. 「Download Python 3.x.x」という大きなボタンをクリック
+3. ダウンロードしたファイルをダブルクリック
+4. **「Add Python to PATH」に必ずチェックを入れてから**「Install Now」をクリック
+5. 完了したら「Close」をクリック
+
+### ステップ2：このプログラムのダウンロード
+
+1. ブラウザで https://github.com/takeshi1015/boat-race-predictor を開く
+2. 緑色の「**< > Code**」ボタンをクリック →「**Download ZIP**」でダウンロード
+3. ダウンロードされたZIPを右クリック →「**すべて展開**」→「展開」
+4. 展開されたフォルダの中の「**boat-race-predictor-main**」を開く
+
+### ステップ3：コマンドプロンプトを開いてフォルダに移動
+
+Windowsキー ＋ R を押して `cmd` と入力 → OK
+
+```
+cd C:\Users\あなたのユーザー名\Downloads\boat-race-predictor-main
+```
+
+> ※「あなたのユーザー名」を実際のユーザー名に変えてください
+
+### ステップ4：必要なパッケージをインストール（初回のみ）
+
+```bash
+pip install -r requirements_minimal.txt
+```
+
+> 少し時間がかかります（1〜3分）。完了を待ってください。
+
+### ステップ5：プログラムを使う
+
+**当日の予想を見る（これだけでOK！）**
+```bash
+python main.py --mode predict-today
+```
+
+**翌日の予想を見る**
+```bash
+python main.py --mode predict-tomorrow
+```
+
+**的中率を分析する**
+```bash
+python main.py --mode analyze
+```
+
+**モデルを再学習させる**
+```bash
+python main.py --mode retrain
+```
+
+**統計情報を見る**
+```bash
+python main.py --mode stats
+```
+
+> ✅ 2回目以降は、ステップ3でフォルダに移動してからステップ5のコマンドを実行するだけです。
+
+---
+
 ## 📋 目次
 
 - [機能](#機能)
@@ -136,6 +204,8 @@ LINE_NOTIFY_TOKEN=your_line_notify_token
 SCHEDULE_TODAY=06:00        # 当日予測実行時刻
 SCHEDULE_TOMORROW=18:00     # 翌日予測実行時刻
 SCHEDULE_EVALUATE=23:30     # 評価実行時刻
+SCHEDULE_RETRAIN=23:40      # 自動学習ループ実行時刻
+AUTO_LEARNING_ENABLED=True  # 分析→再学習の自動実行
 ```
 
 #### 機械学習設定
@@ -172,6 +242,21 @@ python main.py --mode analyze
 ### 5. モデルの再トレーニング
 ```bash
 python main.py --mode retrain
+```
+
+### 6. Web/APIサーバーを起動（遠隔閲覧用）
+```bash
+python main.py --mode web
+```
+- ダッシュボード: `http://<ホスト>:5000/`
+- 結果詳細: `http://<ホスト>:5000/results`
+- 学習ステータス: `http://<ホスト>:5000/api/learning/status`
+
+### 7. 自動学習ループを手動起動（API）
+```bash
+curl -X POST http://<ホスト>:5000/api/learning/auto \
+  -H "Content-Type: application/json" \
+  -d '{"days": 30}'
 ```
 
 ### デバッグモード
@@ -300,5 +385,29 @@ pytest tests/test_models.py -v
 4. ログファイルにエラーメッセージがないか
 
 ---
+
+## ✅ 最新の最小実行手順（SQLite）
+
+```bash
+python scripts/init_db.py
+python scripts/init_test_data.py
+python main.py
+python main.py --mode predict-today
+python main.py --mode predict-tomorrow
+python main.py --mode analyze
+python main.py --mode retrain
+python main.py --mode stats
+```
+
+補助スクリプト:
+
+```bash
+python scripts/predict_today.py
+python scripts/predict_tomorrow.py
+python scripts/analyze_performance.py
+python scripts/retrain_model.py
+python scripts/stats_display.py
+python scripts/verify_app.py
+```
 
 **最終更新**: 2026年7月23日
