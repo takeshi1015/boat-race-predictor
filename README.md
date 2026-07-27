@@ -2,6 +2,74 @@
 
 自動ボートレース予測システム - 機械学習と強化学習を組み合わせた高精度予測ツール
 
+---
+
+## 🚀 はじめての方はこちら（初心者向けクイックスタート）
+
+### ステップ1：Pythonのインストール（まだの場合）
+
+1. ブラウザで https://www.python.org/downloads/ を開く
+2. 「Download Python 3.x.x」という大きなボタンをクリック
+3. ダウンロードしたファイルをダブルクリック
+4. **「Add Python to PATH」に必ずチェックを入れてから**「Install Now」をクリック
+5. 完了したら「Close」をクリック
+
+### ステップ2：このプログラムのダウンロード
+
+1. ブラウザで https://github.com/takeshi1015/boat-race-predictor を開く
+2. 緑色の「**< > Code**」ボタンをクリック →「**Download ZIP**」でダウンロード
+3. ダウンロードされたZIPを右クリック →「**すべて展開**」→「展開」
+4. 展開されたフォルダの中の「**boat-race-predictor-main**」を開く
+
+### ステップ3：コマンドプロンプトを開いてフォルダに移動
+
+Windowsキー ＋ R を押して `cmd` と入力 → OK
+
+```
+cd C:\Users\あなたのユーザー名\Downloads\boat-race-predictor-main
+```
+
+> ※「あなたのユーザー名」を実際のユーザー名に変えてください
+
+### ステップ4：必要なパッケージをインストール（初回のみ）
+
+```bash
+pip install -r requirements_minimal.txt
+```
+
+> 少し時間がかかります（1〜3分）。完了を待ってください。
+
+### ステップ5：プログラムを使う
+
+**当日の予想を見る（これだけでOK！）**
+```bash
+python main.py --mode predict-today
+```
+
+**翌日の予想を見る**
+```bash
+python main.py --mode predict-tomorrow
+```
+
+**的中率を分析する**
+```bash
+python main.py --mode analyze
+```
+
+**モデルを再学習させる**
+```bash
+python main.py --mode retrain
+```
+
+**統計情報を見る**
+```bash
+python main.py --mode stats
+```
+
+> ✅ 2回目以降は、ステップ3でフォルダに移動してからステップ5のコマンドを実行するだけです。
+
+---
+
 ## 📋 目次
 
 - [機能](#機能)

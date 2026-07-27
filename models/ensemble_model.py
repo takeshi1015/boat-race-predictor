@@ -55,6 +55,16 @@ class EnsembleModel:
 
     def _predict_for_date(self, target: datetime) -> List[Dict]:
         races = self._get_races_by_date(target)
+        # 当日のデータがない場合、テストデータを自動生成する
+        if not races and target.date() == datetime.now().date():
+            logger.info("当日のレースデータが見つかりません。テストデータを自動生成します。")
+            try:
+                from scripts.init_test_data import main as _init_test_data
+                _init_test_data()
+                races = self._get_races_by_date(target)
+                logger.info("テストデータを自動生成しました: %d件", len(races))
+            except Exception as exc:
+                logger.warning("テストデータの自動生成に失敗しました: %s", exc)
         logger.info("%sのレースデータ取得: %d件", target.date().isoformat(), len(races))
         predictions = [self._predict_race(race) for race in races]
         return [p for p in predictions if p]
