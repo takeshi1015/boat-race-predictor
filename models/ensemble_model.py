@@ -56,7 +56,8 @@ class EnsembleModel:
     def _predict_for_date(self, target: datetime) -> List[Dict]:
         races = self._get_races_by_date(target)
         # 当日のデータがない場合、テストデータを自動生成する
-        if not races and target.date() == datetime.now().date():
+        is_today = target.date() == datetime.now().date()
+        if not races and is_today:
             logger.info("当日のレースデータが見つかりません。テストデータを自動生成します。")
             try:
                 from scripts.init_test_data import main as _init_test_data

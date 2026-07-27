@@ -120,7 +120,7 @@ class TaskScheduler:
         print(f"\n【{title}】")
         print(f"日付: {target_date}\n")
         if not predictions:
-            print("予測対象レースがありません。先に python scripts/init_test_data.py を実行してください。")
+            print("予測対象レースがありません。")
             return
         purchasable = [p for p in predictions if p["purchasable"]]
         print(f"購入可能予想(信頼度{config.CONFIDENCE_THRESHOLD:.1f}以上): {len(purchasable)}件\n")
