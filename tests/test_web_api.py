@@ -32,6 +32,13 @@ def test_dashboard_loads(client):
     assert response.status_code == 200
 
 
+def test_api_docs_uses_request_base_url(client):
+    """GET /api-docs should display API base URL based on request host."""
+    response = client.get("/api-docs", base_url="http://10.0.0.5:5000")
+    assert response.status_code == 200
+    assert "http://10.0.0.5:5000/api" in response.get_data(as_text=True)
+
+
 # ---------------------------------------------------------------------------
 # API endpoints
 # ---------------------------------------------------------------------------

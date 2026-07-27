@@ -7,7 +7,7 @@ or via the CLI:
     python main.py --mode web
 """
 
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from flask_cors import CORS
 
 import config
@@ -47,7 +47,8 @@ def create_app() -> Flask:
     @app.route("/api-docs")
     def api_docs() -> str:
         """API documentation page."""
-        return render_template("api_docs.html")
+        base_api_url = f"{request.url_root.rstrip('/')}/api"
+        return render_template("api_docs.html", base_api_url=base_api_url)
 
     # -----------------------------------------------------------------------
     # Error handlers

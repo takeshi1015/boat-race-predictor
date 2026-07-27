@@ -284,7 +284,7 @@ def _print_startup_guide():
 
 
 def _run_web_server() -> None:
-    """Start the Flask web server on localhost:5000.
+    """Start the Flask web server on the configured host and port.
 
     Imports the Flask application from app.py and starts the development
     server with debug mode enabled.
@@ -292,7 +292,7 @@ def _run_web_server() -> None:
     from app import create_app
 
     flask_app = create_app()
-    logger.info("Starting Flask web server at http://localhost:%d", config.WEB_PORT)
+    logger.info("Starting Flask web server at http://%s:%d", config.WEB_HOST, config.WEB_PORT)
     flask_app.run(
         host=config.WEB_HOST,
         port=config.WEB_PORT,
