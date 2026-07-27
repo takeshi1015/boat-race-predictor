@@ -348,7 +348,7 @@ def get_today_races() -> Response:
         })
     except Exception as exc:
         logger.error("Today race predictions failed: %s", exc, exc_info=True)
-        return jsonify({"error": str(exc), "predictions": []}), 500
+        return jsonify({"error": "予測の取得に失敗しました", "predictions": []}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +374,7 @@ def get_tomorrow_races() -> Response:
         })
     except Exception as exc:
         logger.error("Tomorrow race predictions failed: %s", exc, exc_info=True)
-        return jsonify({"error": str(exc), "predictions": []}), 500
+        return jsonify({"error": "翌日予測の取得に失敗しました", "predictions": []}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -398,7 +398,7 @@ def get_analysis() -> Response:
         })
     except Exception as exc:
         logger.error("Analysis failed: %s", exc, exc_info=True)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "分析の取得に失敗しました"}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +422,7 @@ def post_retrain() -> Response:
         })
     except Exception as exc:
         logger.error("Retraining failed: %s", exc, exc_info=True)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "再学習に失敗しました"}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -456,5 +456,4 @@ def get_stats() -> Response:
             session.close()
     except Exception as exc:
         logger.error("Stats failed: %s", exc, exc_info=True)
-        return jsonify({"error": str(exc)}), 500
-
+        return jsonify({"error": "統計情報の取得に失敗しました"}), 500

@@ -34,10 +34,11 @@ def main():
     # 1. config
     print("【設定】")
     results.append(check("config.py 読み込み", lambda: __import__("config")))
-    results.append(check("DATABASE_URL が SQLite", lambda: (
-        __import__("config").DATABASE_URL.startswith("sqlite") or None
-        or (_ for _ in ()).throw(AssertionError("DATABASE_URL is not SQLite"))
-    )))
+    def check_sqlite():
+        import config as cfg
+        if not cfg.DATABASE_URL.startswith("sqlite"):
+            raise AssertionError(f"DATABASE_URL is not SQLite: {cfg.DATABASE_URL}")
+    results.append(check("DATABASE_URL が SQLite", check_sqlite))
     print()
 
     # 2. データベース

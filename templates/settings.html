@@ -112,7 +112,7 @@ async function loadSystemInfo() {
   }
 }
 
-async function triggerRetrain() {
+async function triggerRetrain(event) {
   const btn = event.target.closest("button");
   btn.disabled = true;
   btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>学習中…`;
