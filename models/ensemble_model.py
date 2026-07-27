@@ -134,6 +134,20 @@ class EnsembleModel:
         finally:
             session.close()
 
+    def auto_learning_cycle(self, days: int = 30) -> Dict:
+        """Run analyze->retrain cycle and return summary."""
+        before = self.evaluate_performance(days=days)
+        retrain_result = self.retrain(days=days)
+        after = self.evaluate_performance(days=days)
+        return {
+            "days": days,
+            "before": before,
+            "retrain": retrain_result,
+            "after": after,
+            "actions": self._build_countermeasures(before.get("miss_causes", {}), after.get("hit_rate", 0.0)),
+            "timestamp": datetime.now().isoformat(),
+        }
+
     def save_prediction_records(self, predictions: List[Dict], prediction_type: str) -> int:
         session = self.db.get_session()
         try:
@@ -240,3 +254,17 @@ class EnsembleModel:
         total_after_clip = sum(self.model_weights.values()) or 1.0
         for key in self.model_weights:
             self.model_weights[key] = self.model_weights[key] / total_after_clip
+
+    @staticmethod
+    def _build_countermeasures(miss_causes: Dict[str, int], hit_rate: float) -> List[str]:
+        actions: List[str] = []
+        if hit_rate < HIT_RATE_THRESHOLD:
+            actions.append("直近的中率が閾値未満のため、モデル重みの再配分を強めます。")
+        else:
+            actions.append("直近的中率が閾値以上のため、現在の重み構成を維持寄りで微調整します。")
+        if miss_causes:
+            top = sorted(miss_causes.items(), key=lambda x: x[1], reverse=True)[:3]
+            actions.append("不適中要因の上位カテゴリを優先して学習対象にします: " + ", ".join([k for k, _ in top]))
+        else:
+            actions.append("不適中要因データが不足しているため、追加の実績データ蓄積を優先します。")
+        return actions

@@ -136,6 +136,8 @@ LINE_NOTIFY_TOKEN=your_line_notify_token
 SCHEDULE_TODAY=06:00        # 当日予測実行時刻
 SCHEDULE_TOMORROW=18:00     # 翌日予測実行時刻
 SCHEDULE_EVALUATE=23:30     # 評価実行時刻
+SCHEDULE_RETRAIN=23:40      # 自動学習ループ実行時刻
+AUTO_LEARNING_ENABLED=True  # 分析→再学習の自動実行
 ```
 
 #### 機械学習設定
@@ -172,6 +174,21 @@ python main.py --mode analyze
 ### 5. モデルの再トレーニング
 ```bash
 python main.py --mode retrain
+```
+
+### 6. Web/APIサーバーを起動（遠隔閲覧用）
+```bash
+python main.py --mode web
+```
+- ダッシュボード: `http://<ホスト>:5000/`
+- 結果詳細: `http://<ホスト>:5000/results`
+- 学習ステータス: `http://<ホスト>:5000/api/learning/status`
+
+### 7. 自動学習ループを手動起動（API）
+```bash
+curl -X POST http://<ホスト>:5000/api/learning/auto \
+  -H "Content-Type: application/json" \
+  -d '{"days": 30}'
 ```
 
 ### デバッグモード

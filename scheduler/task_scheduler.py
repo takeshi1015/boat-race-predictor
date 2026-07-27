@@ -35,10 +35,13 @@ class TaskScheduler:
         today_hour, today_minute = self._parse_time(config.SCHEDULE_TODAY)
         tomorrow_hour, tomorrow_minute = self._parse_time(config.SCHEDULE_TOMORROW)
         eval_hour, eval_minute = self._parse_time(config.SCHEDULE_EVALUATE)
+        retrain_hour, retrain_minute = self._parse_time(config.SCHEDULE_RETRAIN)
 
         self.scheduler.add_job(self._run_today_prediction, CronTrigger(hour=today_hour, minute=today_minute), id="predict_today", replace_existing=True)
         self.scheduler.add_job(self._run_tomorrow_prediction, CronTrigger(hour=tomorrow_hour, minute=tomorrow_minute), id="predict_tomorrow", replace_existing=True)
         self.scheduler.add_job(self._run_performance_analysis, CronTrigger(hour=eval_hour, minute=eval_minute), id="evaluate_performance", replace_existing=True)
+        if config.AUTO_LEARNING_ENABLED:
+            self.scheduler.add_job(self._run_auto_learning_cycle, CronTrigger(hour=retrain_hour, minute=retrain_minute), id="auto_learn", replace_existing=True)
 
     @staticmethod
     def _parse_time(time_str):
@@ -85,6 +88,25 @@ class TaskScheduler:
         print(f"学習対象レース: {result['learned_races']}件")
         print(f"更新予測件数: {result['updated_predictions']}件")
         print(f"モデル重み: {result['weights']}")
+        return result
+
+    def _run_auto_learning_cycle(self):
+        logger.info("=" * 60)
+        logger.info("自動学習ループを開始")
+        result = self.model.auto_learning_cycle(days=30)
+        before = result.get("before", {})
+        after = result.get("after", {})
+        retrain = result.get("retrain", {})
+        print("\n【自動学習ループ】")
+        print(f"学習対象期間: 直近{result.get('days', 30)}日")
+        print(f"改善前 的中率: {before.get('hit_rate', 0.0):.2%}")
+        print(f"改善後 的中率: {after.get('hit_rate', 0.0):.2%}")
+        print(f"学習対象レース: {retrain.get('learned_races', 0)}件")
+        print(f"重み: {retrain.get('weights', {})}")
+        for action in result.get("actions", []):
+            print(f"- 対策: {action}")
+        logger.info("自動学習ループ完了")
+        logger.info("=" * 60)
         return result
 
     def _run_stats_display(self):
