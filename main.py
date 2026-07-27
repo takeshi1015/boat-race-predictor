@@ -29,19 +29,22 @@ def main():
             "predict-tomorrow",
             "analyze",
             "retrain",
+            "stats",
             "predict",
             "web",
             "api",
+            "run-server",
         ],
-        default="run",
+        default=None,
         help=(
             "Operation mode: "
             "'run' starts the continuous scheduler, "
-            "'web'/'api' start the Flask web/API server, "
+            "'web'/'api'/'run-server' start the Flask web/API server, "
             "'predict' runs a demo prediction, "
             "'predict-today/tomorrow' run the scheduler's daily tasks, "
             "'analyze' analyses performance, "
-            "'retrain' retrains models"
+            "'retrain' retrains models, "
+            "'stats' shows statistics"
         ),
     )
     parser.add_argument(
@@ -71,7 +74,9 @@ def main():
     logger.info("=" * 80)
     
     try:
-        if args.mode == "run":
+        if args.mode is None:
+            _show_usage()
+        elif args.mode == "run":
             _run_scheduler()
         elif args.mode == "predict-today":
             _predict_today()
@@ -81,9 +86,11 @@ def main():
             _analyze_performance()
         elif args.mode == "retrain":
             _retrain_models()
+        elif args.mode == "stats":
+            _show_stats()
         elif args.mode == "predict":
             _run_all_models_demo(export=args.export)
-        elif args.mode in ("web", "api"):
+        elif args.mode in ("web", "api", "run-server"):
             _run_web_server()
         
     except KeyboardInterrupt:
@@ -173,6 +180,52 @@ def _ensemble_predictions(
             "vote_scores": {str(k): round(v, 4) for k, v in vote_scores.items()},
         },
     }
+
+
+def _show_usage() -> None:
+    """起動方法を表示"""
+    print()
+    print("━" * 50)
+    print("ボートレース予測システム v1.0")
+    print("━" * 50)
+    print()
+    print("【起動方法】")
+    print()
+    print("  1. 当日の予想を見る")
+    print("     python main.py --mode predict-today")
+    print()
+    print("  2. 翌日の予想を見る")
+    print("     python main.py --mode predict-tomorrow")
+    print()
+    print("  3. 的中率を分析する")
+    print("     python main.py --mode analyze")
+    print()
+    print("  4. 学習を実行する")
+    print("     python main.py --mode retrain")
+    print()
+    print("  5. 統計情報を表示")
+    print("     python main.py --mode stats")
+    print()
+    print("  6. Web UI を起動する（ブラウザからアクセス）")
+    print("     python main.py --mode run-server")
+    print("     → http://localhost:5000/ でアクセス")
+    print()
+    print("【初回セットアップ】")
+    print("  python scripts/init_test_data.py")
+    print()
+    print("【説明】")
+    print("  - 信頼度 0.7 以上が購入可能な予想です")
+    print("  - 毎日自動的に前日の結果から学習します")
+    print("  - 的中率は徐々に向上します")
+    print()
+    print("━" * 50)
+    print()
+
+
+def _show_stats() -> None:
+    """統計情報を表示"""
+    logger.info("統計情報表示")
+    _get_scheduler()._run_stats_display()
 
 
 def _get_scheduler():

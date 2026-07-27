@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ==================== DATABASE ====================
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/boat_race_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./boat_race.db")
 DATABASE_ECHO = os.getenv("DATABASE_ECHO", "False").lower() == "true"
 
 # ==================== EMAIL SETTINGS ====================

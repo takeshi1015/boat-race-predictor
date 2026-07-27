@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}設定 - ボートレース予測システム{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+  <div class="col">
+    <h2 class="fw-bold"><i class="bi bi-gear me-2 text-primary"></i>設定</h2>
+    <p class="text-muted mb-0">システム設定と操作</p>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- システム情報 -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-info-circle me-2 text-primary"></i>システム情報
+      </div>
+      <div class="card-body" id="system-info">
+        <div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 操作 -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-tools me-2 text-warning"></i>操作
+      </div>
+      <div class="card-body">
+        <div class="d-grid gap-2">
+          <a href="/predictions/today" class="btn btn-primary">
+            <i class="bi bi-calendar-day me-2"></i>当日予想を表示
+          </a>
+          <a href="/predictions/tomorrow" class="btn btn-outline-primary">
+            <i class="bi bi-calendar2-plus me-2"></i>翌日予想を表示
+          </a>
+          <a href="/analysis" class="btn btn-outline-success">
+            <i class="bi bi-bar-chart-line me-2"></i>分析を表示
+          </a>
+          <button class="btn btn-outline-warning" onclick="triggerRetrain(event)">
+            <i class="bi bi-cpu me-2"></i>モデル再学習
+          </button>
+          <a href="/api/predictions/export/json" class="btn btn-outline-secondary">
+            <i class="bi bi-download me-2"></i>予測データをエクスポート（JSON）
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- コマンドリファレンス -->
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-terminal me-2 text-secondary"></i>CLIコマンドリファレンス
+      </div>
+      <div class="card-body">
+        <table class="table table-sm table-striped">
+          <thead>
+            <tr><th>コマンド</th><th>説明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>python main.py</code></td><td>起動方法を表示</td></tr>
+            <tr><td><code>python main.py --mode predict-today</code></td><td>当日予想を表示</td></tr>
+            <tr><td><code>python main.py --mode predict-tomorrow</code></td><td>翌日予想を表示</td></tr>
+            <tr><td><code>python main.py --mode analyze</code></td><td>的中率分析</td></tr>
+            <tr><td><code>python main.py --mode retrain</code></td><td>モデル学習実行</td></tr>
+            <tr><td><code>python main.py --mode stats</code></td><td>統計情報表示</td></tr>
+            <tr><td><code>python main.py --mode run-server</code></td><td>Web UI起動</td></tr>
+            <tr><td><code>python scripts/init_test_data.py</code></td><td>テストデータ生成</td></tr>
+            <tr><td><code>python scripts/verify_app.py</code></td><td>動作確認</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="retrain-alert" class="d-none mt-3">
+  <div class="alert alert-success">
+    <i class="bi bi-check-circle me-2"></i>
+    再学習が完了しました。
+    <span id="retrain-detail"></span>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+async function loadSystemInfo() {
+  try {
+    const [healthRes, statsRes] = await Promise.all([
+      fetch("/api/health"),
+      fetch("/api/stats"),
+    ]);
+    const health = await healthRes.json();
+    const stats = await statsRes.json();
+
+    document.getElementById("system-info").innerHTML = `
+      <table class="table table-sm mb-0">
+        <tr><td class="text-muted">システム状態</td><td><span class="badge bg-success">${health.status === "ok" ? "正常" : "異常"}</span></td></tr>
+        <tr><td class="text-muted">的中率（30日）</td><td>${((stats.hit_rate_30d || 0) * 100).toFixed(1)}%</td></tr>
+        <tr><td class="text-muted">的中率（7日）</td><td>${((stats.hit_rate_7d || 0) * 100).toFixed(1)}%</td></tr>
+        <tr><td class="text-muted">総予測数</td><td>${stats.total_predictions || 0}件</td></tr>
+        <tr><td class="text-muted">確認時刻</td><td>${new Date().toLocaleString("ja-JP")}</td></tr>
+      </table>`;
+  } catch (e) {
+    document.getElementById("system-info").innerHTML = `<div class="text-danger">情報取得エラー: ${e.message}</div>`;
+  }
+}
+
+async function triggerRetrain(event) {
+  const btn = event.target.closest("button");
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>学習中…`;
+
+  try {
+    const res = await fetch("/api/retrain", { method: "POST" });
+    const data = await res.json();
+    const alert = document.getElementById("retrain-alert");
+    alert.classList.remove("d-none");
+    const r = data.result || {};
+    document.getElementById("retrain-detail").textContent =
+      r["的中率"] ? `（的中率: ${r["的中率"]}）` : "";
+    await loadSystemInfo();
+  } catch (e) {
+    alert("再学習エラー: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<i class="bi bi-cpu me-2"></i>モデル再学習`;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", loadSystemInfo);
+</script>
+{% endblock %}

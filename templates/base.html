@@ -45,13 +45,28 @@
             </a>
           </li>
           <li class="nav-item">
+            <a class="nav-link {% if request.path == '/predictions/today' %}active{% endif %}" href="/predictions/today">
+              <i class="bi bi-calendar-day me-1"></i>当日予想
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if request.path == '/predictions/tomorrow' %}active{% endif %}" href="/predictions/tomorrow">
+              <i class="bi bi-calendar2-plus me-1"></i>翌日予想
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if request.path == '/analysis' %}active{% endif %}" href="/analysis">
+              <i class="bi bi-bar-chart-line me-1"></i>分析
+            </a>
+          </li>
+          <li class="nav-item">
             <a class="nav-link {% if request.path == '/results' %}active{% endif %}" href="/results">
               <i class="bi bi-list-ol me-1"></i>結果詳細
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if request.path == '/api-docs' %}active{% endif %}" href="/api-docs">
-              <i class="bi bi-code-slash me-1"></i>API ドキュメント
+            <a class="nav-link {% if request.path == '/settings' %}active{% endif %}" href="/settings">
+              <i class="bi bi-gear me-1"></i>設定
             </a>
           </li>
         </ul>

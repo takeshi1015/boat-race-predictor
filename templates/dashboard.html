@@ -10,7 +10,7 @@
   </div>
   <div class="col-auto">
     <div class="btn-group" role="group">
-      <button id="btn-refresh" class="btn btn-outline-primary btn-sm">
+      <button id="btn-refresh" class="btn btn-outline-primary btn-sm" onclick="refreshAll()">
         <i class="bi bi-arrow-clockwise me-1"></i>更新
       </button>
       <a href="/api/predictions/export/json" class="btn btn-outline-success btn-sm">
@@ -20,6 +20,53 @@
         <i class="bi bi-download me-1"></i>CSV
       </a>
     </div>
+  </div>
+</div>
+
+<!-- クイックナビ -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <a href="/predictions/today" class="card text-decoration-none shadow-sm border-success h-100">
+      <div class="card-body text-center">
+        <i class="bi bi-calendar-day fs-2 text-success mb-2"></i>
+        <h6 class="fw-bold">当日予想</h6>
+        <p class="text-muted small mb-0">購入可能な予想を確認</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <a href="/predictions/tomorrow" class="card text-decoration-none shadow-sm border-primary h-100">
+      <div class="card-body text-center">
+        <i class="bi bi-calendar2-plus fs-2 text-primary mb-2"></i>
+        <h6 class="fw-bold">翌日予想</h6>
+        <p class="text-muted small mb-0">明日の予想を事前確認</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <a href="/analysis" class="card text-decoration-none shadow-sm border-warning h-100">
+      <div class="card-body text-center">
+        <i class="bi bi-bar-chart-line fs-2 text-warning mb-2"></i>
+        <h6 class="fw-bold">分析</h6>
+        <p class="text-muted small mb-0">的中率・回収率を分析</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <a href="/settings" class="card text-decoration-none shadow-sm border-secondary h-100">
+      <div class="card-body text-center">
+        <i class="bi bi-gear fs-2 text-secondary mb-2"></i>
+        <h6 class="fw-bold">設定</h6>
+        <p class="text-muted small mb-0">システム設定・学習実行</p>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- 統計サマリー -->
+<div class="row g-3 mb-4" id="stats-row">
+  <div class="col-12 text-center py-3 text-muted">
+    <div class="spinner-border spinner-border-sm me-2"></div>統計情報を読み込み中…
   </div>
 </div>
 
@@ -69,4 +116,54 @@
 <p class="text-end text-muted small">
   最終更新: <span id="last-updated">-</span>
 </p>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+async function loadStats() {
+  try {
+    const res = await fetch("/api/stats");
+    const data = await res.json();
+    const row = document.getElementById("stats-row");
+    row.innerHTML = `
+      <div class="col-sm-4">
+        <div class="card text-center border-0 bg-light shadow-sm">
+          <div class="card-body py-2">
+            <h5 class="fw-bold text-success mb-0">${((data.hit_rate_30d || 0) * 100).toFixed(1)}%</h5>
+            <p class="text-muted small mb-0">的中率（30日）</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-4">
+        <div class="card text-center border-0 bg-light shadow-sm">
+          <div class="card-body py-2">
+            <h5 class="fw-bold text-primary mb-0">${data.total_predictions || 0}</h5>
+            <p class="text-muted small mb-0">総予測数</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-4">
+        <div class="card text-center border-0 bg-light shadow-sm">
+          <div class="card-body py-2">
+            <h5 class="fw-bold text-warning mb-0">${((data.hit_rate_7d || 0) * 100).toFixed(1)}%</h5>
+            <p class="text-muted small mb-0">的中率（7日）</p>
+          </div>
+        </div>
+      </div>`;
+  } catch (e) {
+    document.getElementById("stats-row").innerHTML = "";
+  }
+}
+
+function refreshAll() {
+  loadStats();
+  // trigger charts.js/app.js refresh if available
+  if (typeof window.loadPredictions === "function") window.loadPredictions();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadStats();
+  document.getElementById("last-updated").textContent = new Date().toLocaleString("ja-JP");
+});
+</script>
 {% endblock %}
