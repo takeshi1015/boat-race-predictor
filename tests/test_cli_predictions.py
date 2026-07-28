@@ -1,8 +1,9 @@
 """Tests for CLI prediction flow."""
 
 import os
+import sqlite3
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from database.db_manager import get_db_manager
 from database.models import Race
@@ -41,8 +42,9 @@ def test_main_help_mode_outputs_startup_guide():
 
 
 def test_predict_tomorrow_bootstraps_when_db_is_empty(tmp_path):
+    db_file = tmp_path / "tomorrow_only.db"
     env = os.environ.copy()
-    env["DATABASE_URL"] = f"sqlite:///{tmp_path / 'tomorrow_only.db'}"
+    env["DATABASE_URL"] = f"sqlite:///{db_file}"
     env["OUTPUTS_DIR"] = str(tmp_path / "outputs")
     result = subprocess.run(
         ["python", "main.py", "--mode", "predict-tomorrow"],
@@ -54,3 +56,11 @@ def test_predict_tomorrow_bootstraps_when_db_is_empty(tmp_path):
     assert "【翌日予想】" in result.stdout
     assert "購入可能予想" in result.stdout
     assert "予測対象レースがありません。" not in result.stdout
+
+    tomorrow = (datetime.now().date() + timedelta(days=1)).isoformat()
+    with sqlite3.connect(db_file) as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM races WHERE substr(date, 1, 10) = ?",
+            (tomorrow,),
+        ).fetchone()
+    assert row is not None and row[0] >= 1
