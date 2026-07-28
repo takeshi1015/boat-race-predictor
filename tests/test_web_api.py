@@ -245,3 +245,76 @@ def test_run_all_models_demo_saves_all(output_dirs):
 
     assert os.path.exists(os.path.join(outputs_dir, "results.json"))
     assert os.path.exists(os.path.join(outputs_dir, "results.csv"))
+
+
+# ---------------------------------------------------------------------------
+# Auto-export: save_race_predictions_auto
+# ---------------------------------------------------------------------------
+
+def test_save_race_predictions_auto_creates_files(output_dirs):
+    """save_race_predictions_auto should write JSON and CSV for race-level predictions."""
+    outputs_dir, history_dir = output_dirs
+
+    from api.utils import save_race_predictions_auto
+
+    sample = [
+        {
+            "place": "桐生",
+            "race_number": 1,
+            "recommended_bet": "1-2-3",
+            "confidence": 0.75,
+            "purchasable": True,
+            "reason": "テスト予想",
+        },
+        {
+            "place": "戸田",
+            "race_number": 2,
+            "recommended_bet": "2-1-3",
+            "confidence": 0.60,
+            "purchasable": False,
+            "reason": "テスト予想2",
+        },
+    ]
+
+    paths = save_race_predictions_auto(sample, mode="today")
+
+    # 正規ファイルが存在する
+    assert os.path.exists(paths["json"])
+    assert os.path.exists(paths["csv"])
+
+    # JSON の内容を検証
+    with open(paths["json"], "r", encoding="utf-8") as f:
+        data = json.load(f)
+    assert data["mode"] == "today"
+    assert data["total"] == 2
+    assert data["purchasable"] == 1
+    assert len(data["predictions"]) == 2
+
+    # CSV の内容を検証（UTF-8 BOM 付き）
+    with open(paths["csv"], "r", encoding="utf-8-sig") as f:
+        content = f.read()
+    assert "place" in content
+    assert "race_number" in content
+    assert "recommended_bet" in content
+    assert "confidence" in content
+    assert "purchasable" in content
+    assert "桐生" in content
+    lines = [ln for ln in content.splitlines() if ln.strip()]
+    assert len(lines) >= 3  # header + 2 data rows
+
+    # 履歴ファイルが保存されている
+    history_json = [f for f in os.listdir(history_dir) if f.endswith("_today.json")]
+    history_csv = [f for f in os.listdir(history_dir) if f.endswith("_today.csv")]
+    assert len(history_json) >= 1
+    assert len(history_csv) >= 1
+
+
+def test_save_race_predictions_auto_tomorrow(output_dirs):
+    """save_race_predictions_auto should use 'tomorrow' label in output filenames."""
+    outputs_dir, _ = output_dirs
+
+    from api.utils import save_race_predictions_auto
+
+    paths = save_race_predictions_auto([], mode="tomorrow")
+    assert "predictions_tomorrow.json" in paths["json"]
+    assert "predictions_tomorrow.csv" in paths["csv"]

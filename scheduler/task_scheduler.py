@@ -54,6 +54,7 @@ class TaskScheduler:
         predictions = self.model.predict_today()
         self.model.save_prediction_records(predictions, "today")
         self._print_predictions("当日予想", datetime.now().strftime("%Y-%m-%d"), predictions)
+        self._auto_export(predictions, "today")
         logger.info("当日予測完了: %dレース", len(predictions))
         logger.info("=" * 60)
         return predictions
@@ -65,9 +66,23 @@ class TaskScheduler:
         self.model.save_prediction_records(predictions, "tomorrow")
         tomorrow = datetime.now().date() + timedelta(days=1)
         self._print_predictions("翌日予想", tomorrow.isoformat(), predictions)
+        self._auto_export(predictions, "tomorrow")
         logger.info("翌日予測完了: %dレース", len(predictions))
         logger.info("=" * 60)
         return predictions
+
+    @staticmethod
+    def _auto_export(predictions: List[Dict], mode: str) -> None:
+        """予想結果を CSV と JSON に自動保存してパスを表示する。"""
+        try:
+            from api.utils import save_race_predictions_auto
+            paths = save_race_predictions_auto(predictions, mode=mode)
+            print(f"\n📁 予想結果を自動保存しました:")
+            print(f"   CSV : {paths['csv']}")
+            print(f"   JSON: {paths['json']}")
+            logger.info("予想結果を自動保存しました: csv=%s json=%s", paths["csv"], paths["json"])
+        except Exception as exc:
+            logger.warning("予想結果の自動保存に失敗しました: %s", exc)
 
     def _run_performance_analysis(self):
         result = self.model.evaluate_performance(days=30)

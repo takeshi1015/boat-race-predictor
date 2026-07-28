@@ -147,6 +147,71 @@ def load_history(limit: int = 100) -> List[Dict[str, Any]]:
     return history
 
 
+def save_race_predictions_auto(predictions: List[Dict], mode: str = "today") -> Dict[str, str]:
+    """EnsembleModel の予想結果を JSON と CSV に自動保存する。
+
+    predict-today / predict-tomorrow 実行時に呼び出され、
+    outputs/predictions_today.csv などに結果を書き出す。
+    CSV は Excel で直接開けるよう UTF-8 BOM 付きで保存する。
+
+    Args:
+        predictions: EnsembleModel.predict_today() / predict_tomorrow() の返り値。
+        mode: "today" または "tomorrow"。ファイル名・中身のラベルに使用。
+
+    Returns:
+        {"json": <jsonファイルパス>, "csv": <csvファイルパス>} の辞書。
+    """
+    _ensure_output_dirs()
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    payload: Dict[str, Any] = {
+        "timestamp": datetime.now().isoformat(),
+        "mode": mode,
+        "total": len(predictions),
+        "purchasable": sum(1 for p in predictions if p.get("purchasable")),
+        "predictions": predictions,
+    }
+
+    # --- JSON ---
+    json_name = f"predictions_{mode}.json"
+    json_canonical = os.path.join(config.OUTPUTS_DIR, json_name)
+    history_json = os.path.join(config.OUTPUTS_HISTORY_DIR, f"{ts}_{mode}.json")
+    for path in (json_canonical, history_json):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    # --- CSV (UTF-8 BOM → Excelで文字化けなし) ---
+    csv_name = f"predictions_{mode}.csv"
+    csv_canonical = os.path.join(config.OUTPUTS_DIR, csv_name)
+    history_csv = os.path.join(config.OUTPUTS_HISTORY_DIR, f"{ts}_{mode}.csv")
+    fieldnames = [
+        "timestamp", "mode", "place", "race_number",
+        "recommended_bet", "confidence", "purchasable", "reason",
+    ]
+    rows = [
+        {
+            "timestamp": payload["timestamp"],
+            "mode": mode,
+            "place": p.get("place", ""),
+            "race_number": p.get("race_number", ""),
+            "recommended_bet": p.get("recommended_bet", ""),
+            "confidence": round(float(p.get("confidence", 0.0)), 4),
+            "purchasable": "○" if p.get("purchasable") else "×",
+            "reason": p.get("reason", ""),
+        }
+        for p in predictions
+    ]
+    for path in (csv_canonical, history_csv):
+        with open(path, "w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+    _rotate_history()
+    logger.info("Race predictions auto-saved: json=%s csv=%s", json_canonical, csv_canonical)
+    return {"json": json_canonical, "csv": csv_canonical}
+
+
 def _rotate_history() -> None:
     """Delete oldest history files when the count exceeds the configured limit."""
     _ensure_output_dirs()
