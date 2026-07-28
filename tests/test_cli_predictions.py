@@ -1,5 +1,6 @@
 """Tests for CLI prediction flow."""
 
+import os
 import subprocess
 from datetime import datetime
 
@@ -37,3 +38,19 @@ def test_main_help_mode_outputs_startup_guide():
     assert "ボートレース予測システム v1.0" in result.stdout
     assert "【当日予想】" in result.stdout
     assert "【翌日予想】" in result.stdout
+
+
+def test_predict_tomorrow_bootstraps_when_db_is_empty(tmp_path):
+    env = os.environ.copy()
+    env["DATABASE_URL"] = f"sqlite:///{tmp_path / 'tomorrow_only.db'}"
+    env["OUTPUTS_DIR"] = str(tmp_path / "outputs")
+    result = subprocess.run(
+        ["python", "main.py", "--mode", "predict-tomorrow"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert "【翌日予想】" in result.stdout
+    assert "購入可能予想" in result.stdout
+    assert "予測対象レースがありません。" not in result.stdout

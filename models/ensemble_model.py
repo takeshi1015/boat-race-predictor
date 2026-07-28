@@ -55,20 +55,25 @@ class EnsembleModel:
 
     def _predict_for_date(self, target: datetime) -> List[Dict]:
         races = self._get_races_by_date(target)
-        # 当日のデータがない場合、テストデータを自動生成する
-        is_today = target.date() == datetime.now().date()
-        if not races and is_today:
-            logger.info("当日のレースデータが見つかりません。テストデータを自動生成します。")
+        # 近接日(当日/翌日)のデータがない場合、テストデータを自動生成する
+        if not races and self._should_bootstrap_races(target):
+            logger.info("%sのレースデータが見つかりません。テストデータを自動生成します。", target.date().isoformat())
             try:
                 from scripts.init_test_data import main as _init_test_data
                 _init_test_data()
                 races = self._get_races_by_date(target)
-                logger.info("テストデータを自動生成しました: %d件", len(races))
+                logger.info("%sのテストデータを自動生成しました: %d件", target.date().isoformat(), len(races))
             except Exception as exc:
                 logger.warning("テストデータの自動生成に失敗しました: %s", exc)
         logger.info("%sのレースデータ取得: %d件", target.date().isoformat(), len(races))
         predictions = [self._predict_race(race) for race in races]
         return [p for p in predictions if p]
+
+    @staticmethod
+    def _should_bootstrap_races(target: datetime) -> bool:
+        """当日または翌日の予測実行時のみテストデータ自動生成を許可する。"""
+        today = datetime.now().date()
+        return target.date() in (today, today + timedelta(days=1))
 
     def _predict_race(self, race: Race) -> Dict:
         stat_scores = self.stat_model.score(race)
