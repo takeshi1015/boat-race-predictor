@@ -15,11 +15,12 @@ from database.db_manager import get_db_manager
 from database.models import Race, Prediction
 
 
-# 競艇場データ
-VENUES = [
+# 全24場のボートレース場
+ALL_VENUES = [
     "桐生", "戸田", "江戸川", "平和島", "多摩川",
     "浜名湖", "蒲郡", "常滑", "津", "三国",
     "びわこ", "住之江", "尼崎", "鳴門", "丸亀",
+    "児島", "宮島", "芦屋", "福岡", "唐津", "大村",
 ]
 
 WEATHERS = ["sunny", "cloudy", "rainy"]
@@ -74,35 +75,24 @@ def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: flo
     }
 
 
-def create_today_races(session, db, target_date: datetime, num_races: int = 3) -> list:
-    """当日のレースデータを作成（現在時刻より10分以上後のレースのみ）"""
+def create_today_races(session, db, target_date: datetime, num_races: int = 10) -> list:
+    """当日のレースデータを作成（全24場から10場をランダム選択、現在時刻より30分以上後のレースのみ）"""
     now = datetime.now()
     
-    # 本日開催中のレース場（ユーザーが公式サイトで確認した情報）
-    operating_venues = [
-        "丸亀",      # 香川県
-        "下関",      # 山口県
-        "大村",      # 長崎県
-    ]
+    # 全24場からランダムに選択
+    venues_today = random.sample(ALL_VENUES, min(num_races, len(ALL_VENUES)))
     
-    venues_today = operating_venues[:num_races]
-    
-    # 現在時刻より10分以上後のレースを生成
+    # 現在時刻より30分以上後のレースを生成
     current_hour = now.hour
     current_minute = now.minute
     
-    # 購入締め切りは開始時刻の10分前
-    # 現在 19:32 → 19:42 以降開始のレースなら購入可能
-    # つまり 20時以降のレースが確実に購入可能
-    
-    if current_minute < 50:
-        # 次の時間の00分以降のレースを生成
-        start_hour = current_hour + 1
+    # 最初のレースは30分以上後
+    if current_minute < 30:
+        start_hour = current_hour + 1  # 次の時間の00分
     else:
-        # 次々時間の00分のレース
-        start_hour = current_hour + 2
+        start_hour = current_hour + 1  # 次の時間の00分
     
-    # 生成するレース時刻（購入可能な時刻：開始30分以上後）
+    # 生成するレース時刻（現在時刻の30分以上後）
     hours = []
     for i in range(num_races):
         race_hour = start_hour + i
@@ -144,8 +134,8 @@ def create_historical_data(session, db, days: int = 30) -> int:
 
     for day_offset in range(1, days + 1):
         target_date = today - timedelta(days=day_offset)
-        num_venues = random.randint(3, 6)
-        venues_day = random.sample(VENUES, num_venues)
+        num_venues = random.randint(5, 10)
+        venues_day = random.sample(ALL_VENUES, num_venues)
         hours = [10, 12, 14, 16, 18, 20]
 
         for i, venue in enumerate(venues_day):
@@ -188,10 +178,10 @@ def main():
         today = datetime.now()
         tomorrow = today + timedelta(days=1)
 
-        # 当日レース（本日開催中のレース場のみ）
+        # 当日レース（全24場からランダム選択）
         print("📅 当日レースデータを作成中...")
         print(f"   現在時刻: {today.strftime('%H:%M:%S')}")
-        today_races = create_today_races(session, db, today, num_races=3)
+        today_races = create_today_races(session, db, today, num_races=10)
         print(f"  ✅ 当日レース: {len(today_races)}件")
         for r in today_races:
             place = r.place or r.venue or "?"
@@ -201,7 +191,7 @@ def main():
         # 翌日レース
         print()
         print("📅 翌日レースデータを作成中...")
-        tomorrow_races = create_today_races(session, db, tomorrow, num_races=3)
+        tomorrow_races = create_today_races(session, db, tomorrow, num_races=10)
         print(f"  ✅ 翌日レース: {len(tomorrow_races)}件")
 
         # 過去30日間データ
