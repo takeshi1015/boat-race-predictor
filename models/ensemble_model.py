@@ -144,10 +144,12 @@ class EnsembleModel:
                 races = list(db.get_races_by_date(session, target_date))
                 if period == "today":
                     now = datetime.now()
-                    races = [
-                        race for race in races
-                        if (self._get_race_start_datetime(race) is None or self._get_race_start_datetime(race) > now)
-                    ]
+                    filtered_races = []
+                    for race in races:
+                        race_start = self._get_race_start_datetime(race)
+                        if race_start is None or race_start > now:
+                            filtered_races.append(race)
+                    races = filtered_races
                 return list(races)
             finally:
                 session.close()
