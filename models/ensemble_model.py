@@ -28,6 +28,9 @@ _WATER_REASONS = {
     "rough": "荒れた水面で波乱含みの展開",
 }
 
+# ボートレースの購入締め切り時間（レース開始の何分前まで購入可能か）
+RACE_TICKET_CUTOFF_MINUTES = 10
+
 
 def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -> float:
     """条件から信頼度スコアを算出"""
@@ -53,6 +56,20 @@ def _make_prediction_order(race_number: int, weather: str) -> list:
     elif race_number % 3 == 0:
         base = [1, 3, 2, 4, 5, 6]
     return base[:3]
+
+
+def _is_race_purchasable(race_datetime: datetime) -> bool:
+    """レースが現在購入可能か判定
+    
+    Args:
+        race_datetime: レース開始日時
+        
+    Returns:
+        True: 購入可能, False: 購入不可
+    """
+    now = datetime.now()
+    cutoff_time = race_datetime - timedelta(minutes=RACE_TICKET_CUTOFF_MINUTES)
+    return now <= cutoff_time
 
 
 class EnsembleModel:
@@ -99,19 +116,16 @@ class EnsembleModel:
                 
                 # 開催中か確認
                 if venue_name not in operating_venues:
-                    logger.debug(f"❌ {venue_name} {race.race_number}R {race.start_time_hour}時 - レース場が非開催のため除外")
+                    logger.debug(f"❌ {venue_name} {race.race_number}R - レース場が非開催のため除外")
                     continue
                 
-                # 当日の場合、現在時刻より後のレースのみを処理
-                if period == "today":
-                    race_datetime = getattr(race, "date", None)
-                    if race_datetime:
-                        # 現在時刻より前のレースは除外
-                        if race_datetime <= now:
-                            logger.debug(f"❌ {venue_name} {race.race_number}R {race.start_time_hour}時 - 過去のレースのため除外")
-                            continue
-                        else:
-                            logger.debug(f"✅ {venue_name} {race.race_number}R {race.start_time_hour}時 - 予測対象")
+                # 購入可能か確認（重要: 日付+時刻で判定）
+                race_datetime = getattr(race, "date", None)
+                if race_datetime and not _is_race_purchasable(race_datetime):
+                    logger.debug(f"❌ {venue_name} {race.race_number}R {race_datetime.strftime('%H:%M')} - 購入締め切り終了のため除外")
+                    continue
+                
+                logger.debug(f"✅ {venue_name} {race.race_number}R {race_datetime.strftime('%H:%M') if race_datetime else '?'} - 予測対象")
                 
                 pred = self._predict_race(race)
                 if pred:
