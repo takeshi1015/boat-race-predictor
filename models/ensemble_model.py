@@ -87,7 +87,7 @@ class EnsembleModel:
             predictions = []
             for race in races:
                 pred = self._predict_race(race)
-                if pred:
+                if pred and self._is_prediction_purchasable(pred):
                     predictions.append(pred)
             logger.info(f"{period}予測完了: {len(predictions)}件")
             return predictions
@@ -145,7 +145,10 @@ class EnsembleModel:
                 if period == "today":
                     now = datetime.now()
                     filtered_races = []
+                    operating_venues = self._get_operating_venues_today()
                     for race in races:
+                        if not self._is_operating_venue(race, operating_venues):
+                            continue
                         race_start = self._get_race_start_datetime(race)
                         if race_start is None or race_start > now:
                             filtered_races.append(race)
@@ -175,6 +178,29 @@ class EnsembleModel:
             return race_date
 
         return None
+
+    @staticmethod
+    def _get_operating_venues_today():
+        """本日開催中のレース場一覧を取得"""
+        try:
+            from utils.venue_manager import VenueManager
+            return set(VenueManager().get_operating_venues_today() or [])
+        except Exception as e:
+            logger.warning(f"開催場取得エラー: {e}")
+            return set()
+
+    @staticmethod
+    def _is_operating_venue(race, operating_venues) -> bool:
+        """開催中のレース場か判定"""
+        if not operating_venues:
+            return True
+        place = getattr(race, "place", None) or getattr(race, "venue", None)
+        return place in operating_venues
+
+    @staticmethod
+    def _is_prediction_purchasable(prediction: dict) -> bool:
+        """購入対象の予測か判定"""
+        return float(prediction.get("confidence", 0.0)) >= config.CONFIDENCE_THRESHOLD
 
     def evaluate_performance(self) -> dict:
         """データベースを参照してパフォーマンスを評価"""

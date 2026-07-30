@@ -19,7 +19,7 @@ def _stars(confidence: float) -> str:
 
 # 購入可否ラベル
 def _buy_label(confidence: float) -> str:
-    return "購入可能" if confidence >= 0.7 else "参考情報"
+    return "購入可能" if confidence >= config.CONFIDENCE_THRESHOLD else "参考情報"
 
 
 def _display_predictions(predictions: list, title: str) -> None:
@@ -120,11 +120,16 @@ class TaskScheduler:
             predictions = self._get_model().predict_today()
             logger.info(f"当日予測完了: {len(predictions)}レース")
 
-            high_confidence = [p for p in predictions if float(p.get("confidence", 0)) >= 0.7]
+            high_confidence = [
+                p for p in predictions
+                if float(p.get("confidence", 0)) >= config.CONFIDENCE_THRESHOLD
+            ]
             if high_confidence:
-                logger.info(f"信頼度0.7以上の予測: {len(high_confidence)}件")
+                logger.info(
+                    f"信頼度{config.CONFIDENCE_THRESHOLD:.1f}以上の予測: {len(high_confidence)}件"
+                )
             else:
-                logger.info("信頼度0.7以上の予測はありません")
+                logger.info(f"信頼度{config.CONFIDENCE_THRESHOLD:.1f}以上の予測はありません")
 
             _display_predictions(predictions, "当日予想")
         except Exception as e:
@@ -140,11 +145,16 @@ class TaskScheduler:
             predictions = self._get_model().predict_tomorrow()
             logger.info(f"翌日予測完了: {len(predictions)}レース")
 
-            high_confidence = [p for p in predictions if float(p.get("confidence", 0)) >= 0.7]
+            high_confidence = [
+                p for p in predictions
+                if float(p.get("confidence", 0)) >= config.CONFIDENCE_THRESHOLD
+            ]
             if high_confidence:
-                logger.info(f"信頼度0.7以上の予測: {len(high_confidence)}件")
+                logger.info(
+                    f"信頼度{config.CONFIDENCE_THRESHOLD:.1f}以上の予測: {len(high_confidence)}件"
+                )
             else:
-                logger.info("信頼度0.7以上の予測はありません")
+                logger.info(f"信頼度{config.CONFIDENCE_THRESHOLD:.1f}以上の予測はありません")
 
             _display_predictions(predictions, "翌日予想")
         except Exception as e:
