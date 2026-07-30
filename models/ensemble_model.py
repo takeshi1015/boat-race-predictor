@@ -88,22 +88,30 @@ class EnsembleModel:
 
             predictions = []
             now = datetime.now()
+            operating_venues = self.venue_manager.get_operating_venues_today()
+            
+            logger.info(f"現在時刻: {now.strftime('%H:%M:%S')}")
+            logger.info(f"本日開催中のレース場: {operating_venues}")
             
             for race in races:
+                # 開催中のレース場のみを処理
+                venue_name = getattr(race, "place", None) or getattr(race, "venue", None)
+                
+                # 開催中か確認
+                if venue_name not in operating_venues:
+                    logger.debug(f"❌ {venue_name} {race.race_number}R {race.start_time_hour}時 - レース場が非開催のため除外")
+                    continue
+                
                 # 当日の場合、現在時刻より後のレースのみを処理
                 if period == "today":
                     race_datetime = getattr(race, "date", None)
                     if race_datetime:
                         # 現在時刻より前のレースは除外
                         if race_datetime <= now:
-                            logger.debug(f"レース {race.race_id} は過去のため除外")
+                            logger.debug(f"❌ {venue_name} {race.race_number}R {race.start_time_hour}時 - 過去のレースのため除外")
                             continue
-                
-                # 開催中のレース場のみを処理
-                venue_name = getattr(race, "place", None) or getattr(race, "venue", None)
-                if venue_name and not self.venue_manager.is_venue_operating(venue_name):
-                    logger.debug(f"レース場 {venue_name} は本日非開催のため除外")
-                    continue
+                        else:
+                            logger.debug(f"✅ {venue_name} {race.race_number}R {race.start_time_hour}時 - 予測対象")
                 
                 pred = self._predict_race(race)
                 if pred:
