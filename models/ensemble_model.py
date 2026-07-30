@@ -141,13 +141,38 @@ class EnsembleModel:
                     target_date = datetime.now()
                 else:
                     target_date = datetime.now() + timedelta(days=1)
-                races = db.get_races_by_date(session, target_date)
+                races = list(db.get_races_by_date(session, target_date))
+                if period == "today":
+                    now = datetime.now()
+                    races = [
+                        race for race in races
+                        if (self._get_race_start_datetime(race) is None or self._get_race_start_datetime(race) > now)
+                    ]
                 return list(races)
             finally:
                 session.close()
         except Exception as e:
             logger.error(f"レースデータ取得エラー: {e}")
             return []
+
+    @staticmethod
+    def _get_race_start_datetime(race):
+        """レース開始日時を取得"""
+        race_date = getattr(race, "date", None)
+        start_hour = getattr(race, "start_time_hour", None)
+
+        if isinstance(race_date, datetime):
+            if (
+                start_hour is not None
+                and race_date.hour == 0
+                and race_date.minute == 0
+                and race_date.second == 0
+                and race_date.microsecond == 0
+            ):
+                return race_date.replace(hour=start_hour)
+            return race_date
+
+        return None
 
     def evaluate_performance(self) -> dict:
         """データベースを参照してパフォーマンスを評価"""
