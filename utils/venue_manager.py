@@ -1,18 +1,22 @@
 """
 ボートレース場の開催状況を管理するモジュール
+公式サイトから実開催情報を取得
 """
 
 from datetime import datetime
 import json
 import os
-from pathlib import Path
 import logging
+import requests
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
 
 class VenueManager:
     """ボートレース場の開催状況を管理"""
+
+    BASE_URL = "https://boatrace.jp"
 
     # 全24場のレース場情報
     ALL_VENUES = {
@@ -41,23 +45,21 @@ class VenueManager:
 
     def __init__(self):
         self.cache_file = "venue_schedule.json"
-        self.cache_expiry_hours = 24
+        self.cache_expiry_hours = 3  # 3時間でキャッシュ無効
+        self.session = requests.Session()
+        self.session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
 
     def get_operating_venues_today(self):
         """
-        本日開催中のレース場のみを取得
-        手順：
-        1. キャッシュから取得を試みる
-        2. 公式サイトからスクレイピング
-        3. データベースのレースデータから抽出
+        本日開催中のレース場を取得
+        優先順位：
+        1. 公式サイトからスクレイピング（リアルタイム）
+        2. キャッシュから取得
+        3. DBのレースデータから抽出
         """
-        # キャッシュから取得を試みる
-        cached_venues = self._load_cache()
-        if cached_venues is not None:
-            logger.info(f"キャッシュから開催場所取得: {cached_venues}")
-            return cached_venues
-
-        # 公式サイトからスクレイピング
+        # 公式サイトからスクレイピング（最優先）
         try:
             operating = self._fetch_from_official_site()
             if operating:
@@ -65,104 +67,134 @@ class VenueManager:
                 logger.info(f"公式サイトから開催場所取得: {operating}")
                 return operating
         except Exception as e:
-            logger.debug(f"公式サイトからのスクレイピング失敗: {e}")
+            logger.debug(f"公式サイトスクレイピング失敗: {e}")
 
-        # フォールバック: データベースのレースデータから開催場所を抽出
+        # キャッシュから取得
+        cached_venues = self._load_cache()
+        if cached_venues is not None:
+            logger.info(f"キャッシュから開催場所取得: {cached_venues}")
+            return cached_venues
+
+        # フォールバック: DBのレースデータから開催場所を抽出
         try:
             operating = self._get_venues_from_database()
             if operating:
                 logger.info(f"DBから開催場所取得: {operating}")
                 return operating
         except Exception as e:
-            logger.debug(f"DBからの抽出失敗: {e}")
+            logger.debug(f"DB抽出失敗: {e}")
 
         logger.warning("開催場所情報を取得できません")
         return []
 
-    def _fetch_from_official_site(self):
+    def get_operating_venues_tomorrow(self):
+        """翌日開催中のレース場を取得"""
+        from datetime import datetime, timedelta
+        
+        tomorrow = datetime.now() + timedelta(days=1)
+        
+        try:
+            operating = self._fetch_from_official_site(target_date=tomorrow)
+            if operating:
+                logger.info(f"翌日開催場所取得: {operating}")
+                return operating
+        except Exception as e:
+            logger.debug(f"翌日スクレイピング失敗: {e}")
+
+        # フォールバック: DBから取得
+        try:
+            operating = self._get_venues_from_database(target_date=tomorrow)
+            if operating:
+                logger.info(f"翌日DB開催場所取得: {operating}")
+                return operating
+        except Exception as e:
+            logger.debug(f"翌日DB抽出失敗: {e}")
+
+        return []
+
+    def _fetch_from_official_site(self, target_date=None):
         """ボートレース公式サイトからスクレイピング"""
         try:
-            import requests
-            from bs4 import BeautifulSoup
+            if target_date is None:
+                target_date = datetime.now()
 
-            url = "https://boatrace.jp/race/schedule"
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
+            date_str = target_date.strftime("%Y%m%d")
+            url = f"{self.BASE_URL}/race/schedule"
+            params = {"date": date_str}
 
-            response = requests.get(url, headers=headers, timeout=10)
+            response = self.session.get(url, params=params, timeout=10)
             response.encoding = "utf-8"
+
+            if response.status_code != 200:
+                logger.debug(f"HTTP {response.status_code}")
+                return None
+
             soup = BeautifulSoup(response.content, "html.parser")
 
-            # 公式サイトのHTML構造をパース
+            # 開催中のレース場を抽出
             operating_venues = []
 
-            # 例: <div class="schedule-item"> のような構造を探す
-            schedule_items = soup.find_all(
-                "div", class_=["schedule-item", "race-item", "venue-item"]
-            )
+            # 方法1: schedule-listクラスから抽出
+            schedule_list = soup.find("div", class_="schedule-list")
+            if schedule_list:
+                items = schedule_list.find_all("div", class_="schedule-item")
+                for item in items:
+                    venue_name = self._extract_venue_name(item.get_text(strip=True))
+                    if venue_name and venue_name not in operating_venues:
+                        operating_venues.append(venue_name)
 
-            for item in schedule_items:
-                # レース場名を抽出
-                venue_name = item.get_text(strip=True)
-
-                # 全レース場と照合
-                for official_name in self.ALL_VENUES.keys():
-                    if official_name in venue_name:
-                        if official_name not in operating_venues:
-                            operating_venues.append(official_name)
-                        break
-
-            # 見つからない場合は別の方法を試す
+            # 方法2: テーブルから抽出
             if not operating_venues:
-                operating_venues = self._parse_schedule_table(soup)
+                tables = soup.find_all("table")
+                for table in tables:
+                    rows = table.find_all("tr")
+                    for row in rows:
+                        cells = row.find_all(["td", "th"])
+                        for cell in cells:
+                            venue_name = self._extract_venue_name(cell.get_text(strip=True))
+                            if venue_name and venue_name not in operating_venues:
+                                operating_venues.append(venue_name)
 
-            return operating_venues if operating_venues else None
+            # 方法3: リンクから抽出
+            if not operating_venues:
+                for link in soup.find_all("a", href=True):
+                    href = link["href"]
+                    # /race/schedule?date=YYYYMMDD&jyo=XX のようなURL
+                    if "/race/schedule" in href and "jyo=" in href:
+                        # URLから会場コードを抽出
+                        jyo_code = href.split("jyo=")[-1].split("&")[0]
+                        for venue_name, info in self.ALL_VENUES.items():
+                            if info["code"] == jyo_code:
+                                if venue_name not in operating_venues:
+                                    operating_venues.append(venue_name)
+                                break
 
-        except ImportError:
-            logger.debug("requests または BeautifulSoup がインストールされていません")
-            return None
+            return sorted(operating_venues) if operating_venues else None
+
         except Exception as e:
             logger.debug(f"スクレイピング処理エラー: {e}")
             return None
 
-    def _parse_schedule_table(self, soup):
-        """HTML テーブルからスケジュール情報を抽出"""
-        try:
-            operating_venues = []
+    def _extract_venue_name(self, text: str):
+        """テキストからレース場名を抽出"""
+        for official_name in self.ALL_VENUES.keys():
+            if official_name in text:
+                return official_name
+        return None
 
-            # テーブル構造を探す
-            tables = soup.find_all("table")
-            for table in tables:
-                rows = table.find_all("tr")
-                for row in rows:
-                    cells = row.find_all(["td", "th"])
-                    for cell in cells:
-                        text = cell.get_text(strip=True)
-
-                        # 全レース場と照合
-                        for official_name in self.ALL_VENUES.keys():
-                            if official_name in text:
-                                if official_name not in operating_venues:
-                                    operating_venues.append(official_name)
-                                break
-
-            return operating_venues if operating_venues else None
-
-        except Exception as e:
-            logger.debug(f"テーブルパース処理エラー: {e}")
-            return None
-
-    def _get_venues_from_database(self):
-        """データベースのレースデータから本日の開催場所を抽出"""
+    def _get_venues_from_database(self, target_date=None):
+        """データベースのレースデータから開催場所を抽出"""
         try:
             from database.db_manager import get_db_manager
             from datetime import datetime
             
+            if target_date is None:
+                target_date = datetime.now()
+            
             db = get_db_manager()
             session = db.get_session()
             try:
-                races = db.get_races_by_date(session, datetime.now())
+                races = db.get_races_by_date(session, target_date)
                 venues = list(set([r.place or r.venue for r in races if (r.place or r.venue)]))
                 return sorted(venues) if venues else None
             finally:
