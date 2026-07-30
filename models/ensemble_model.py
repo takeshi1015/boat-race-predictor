@@ -106,14 +106,10 @@ class EnsembleModel:
             predictions = []
             now = datetime.now()
             
-            # 当日と翌日で使い分け
-            if period == "today":
-                operating_venues = self.venue_manager.get_operating_venues_today()
-                logger.info(f"現在時刻: {now.strftime('%H:%M:%S')}")
-                logger.info(f"本日開催中のレース場: {operating_venues}")
-            else:
-                operating_venues = self.venue_manager.get_operating_venues_tomorrow()
-                logger.info(f"翌日開催中のレース場: {operating_venues}")
+            # DBから開催中のレース場を抽出（シンプルな方法）
+            operating_venues = self._extract_venues_from_races(races)
+            logger.info(f"現在時刻: {now.strftime('%H:%M:%S')}")
+            logger.info(f"{period}のレースが存在するレース場: {operating_venues}")
             
             for race in races:
                 # 開催中のレース場のみを処理
@@ -143,6 +139,15 @@ class EnsembleModel:
         except Exception as e:
             logger.error(f"{period}予測エラー: {e}", exc_info=True)
             return []
+
+    def _extract_venues_from_races(self, races: list) -> list:
+        """レースデータから開催中のレース場を抽出"""
+        venues = set()
+        for race in races:
+            venue_name = getattr(race, "place", None) or getattr(race, "venue", None)
+            if venue_name:
+                venues.add(venue_name)
+        return sorted(list(venues))
 
     def _predict_race(self, race) -> dict:
         """個別レースの予測"""
