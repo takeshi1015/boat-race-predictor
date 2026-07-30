@@ -105,10 +105,15 @@ class EnsembleModel:
 
             predictions = []
             now = datetime.now()
-            operating_venues = self.venue_manager.get_operating_venues_today()
             
-            logger.info(f"現在時刻: {now.strftime('%H:%M:%S')}")
-            logger.info(f"本日開催中のレース場: {operating_venues}")
+            # 当日と翌日で使い分け
+            if period == "today":
+                operating_venues = self.venue_manager.get_operating_venues_today()
+                logger.info(f"現在時刻: {now.strftime('%H:%M:%S')}")
+                logger.info(f"本日開催中のレース場: {operating_venues}")
+            else:
+                operating_venues = self.venue_manager.get_operating_venues_tomorrow()
+                logger.info(f"翌日開催中のレース場: {operating_venues}")
             
             for race in races:
                 # 開催中のレース場のみを処理
@@ -119,12 +124,14 @@ class EnsembleModel:
                     logger.debug(f"❌ {venue_name} {race.race_number}R - レース場が非開催のため除外")
                     continue
                 
-                # 購入可能か確認（重要: 日付+時刻で判定）
-                race_datetime = getattr(race, "date", None)
-                if race_datetime and not _is_race_purchasable(race_datetime):
-                    logger.debug(f"❌ {venue_name} {race.race_number}R {race_datetime.strftime('%H:%M')} - 購入締め切り終了のため除外")
-                    continue
+                # 当日のみ購入可能性を確認（翌日は時刻チェック不要）
+                if period == "today":
+                    race_datetime = getattr(race, "date", None)
+                    if race_datetime and not _is_race_purchasable(race_datetime):
+                        logger.debug(f"❌ {venue_name} {race.race_number}R {race_datetime.strftime('%H:%M')} - 購入締め切り終了のため除外")
+                        continue
                 
+                race_datetime = getattr(race, "date", None)
                 logger.debug(f"✅ {venue_name} {race.race_number}R {race_datetime.strftime('%H:%M') if race_datetime else '?'} - 予測対象")
                 
                 pred = self._predict_race(race)
