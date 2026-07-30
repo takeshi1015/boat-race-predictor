@@ -75,12 +75,52 @@ def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: flo
 
 
 def create_today_races(session, db, target_date: datetime, num_races: int = 6) -> list:
-    """当日のレースデータを作成"""
-    venues_today = random.sample(VENUES, min(num_races, len(VENUES)))
-    hours = [10, 11, 12, 13, 14, 16, 18, 19, 20]
+    """当日のレースデータを作成（現在時刻より後のレースのみ）"""
+    now = datetime.now()
+    
+    # 本日開催中のレース場（実際のボートレース場から選抜）
+    operating_venues = [
+        "丸亀",      # 香川県
+        "児島",      # 岡山県
+        "宮島",      # 広島県
+        "芦屋",      # 福岡県
+        "福岡",      # 福岡県
+        "唐津",      # 佐賀県
+        "大村",      # 長崎県
+        "びわこ",    # 滋賀県
+    ]
+    
+    venues_today = random.sample(operating_venues, min(num_races, len(operating_venues)))
+    
+    # 現在時刻より後のレースを生成
+    current_hour = now.hour
+    current_minute = now.minute
+    
+    # 現在時刻の15分後から始まるレースを生成（30分刻み）
+    start_hour = current_hour
+    if current_minute >= 30:
+        start_hour += 1
+    
+    # 生成するレース時刻（現在時刻の後）
+    hours = []
+    for i in range(num_races):
+        race_hour = start_hour + i
+        if race_hour < 24:  # 同日内のみ
+            hours.append(race_hour)
+    
+    # 時刻が不足する場合はランダムに生成
+    while len(hours) < num_races:
+        hours.append(random.randint(15, 22))
+    
+    hours = hours[:num_races]
+    
     created = []
     for i, venue in enumerate(venues_today):
-        hour = hours[i % len(hours)]
+        if i < len(hours):
+            hour = hours[i]
+        else:
+            hour = random.randint(15, 22)
+        
         race_data = _make_race(target_date, venue, i + 1, hour)
         # 既存チェック
         existing = db.get_race(session, race_data["race_id"])
@@ -147,8 +187,9 @@ def main():
         today = datetime.now()
         tomorrow = today + timedelta(days=1)
 
-        # 当日レース（6件以上）
+        # 当日レース（現在時刻より後のみ）
         print("📅 当日レースデータを作成中...")
+        print(f"   現在時刻: {today.strftime('%H:%M:%S')}")
         today_races = create_today_races(session, db, today, num_races=6)
         print(f"  ✅ 当日レース: {len(today_races)}件")
         for r in today_races:
