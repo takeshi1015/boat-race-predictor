@@ -46,12 +46,15 @@ class VenueManager:
     def get_operating_venues_today(self):
         """
         本日開催中のレース場のみを取得
-        ボートレース公式サイトからスクレイピング、失敗時はキャッシュを使用
+        手順：
+        1. キャッシュから取得を試みる
+        2. 公式サイトからスクレイピング
+        3. データベースのレースデータから抽出
         """
         # キャッシュから取得を試みる
         cached_venues = self._load_cache()
         if cached_venues is not None:
-            logger.info(f"キャッシュから取得: {cached_venues}")
+            logger.info(f"キャッシュから開催場所取得: {cached_venues}")
             return cached_venues
 
         # 公式サイトからスクレイピング
@@ -59,12 +62,20 @@ class VenueManager:
             operating = self._fetch_from_official_site()
             if operating:
                 self._save_cache(operating)
-                logger.info(f"公式サイトから取得: {operating}")
+                logger.info(f"公式サイトから開催場所取得: {operating}")
                 return operating
         except Exception as e:
-            logger.warning(f"公式サイトからのスクレイピング失敗: {e}")
+            logger.debug(f"公式サイトからのスクレイピング失敗: {e}")
 
-        # フォールバック: 空のリスト（開催情報がない場合）
+        # フォールバック: データベースのレースデータから開催場所を抽出
+        try:
+            operating = self._get_venues_from_database()
+            if operating:
+                logger.info(f"DBから開催場所取得: {operating}")
+                return operating
+        except Exception as e:
+            logger.debug(f"DBからの抽出失敗: {e}")
+
         logger.warning("開催場所情報を取得できません")
         return []
 
@@ -87,7 +98,6 @@ class VenueManager:
             operating_venues = []
 
             # 例: <div class="schedule-item"> のような構造を探す
-            # 実際の公式サイト構造に合わせて調整が必要
             schedule_items = soup.find_all(
                 "div", class_=["schedule-item", "race-item", "venue-item"]
             )
@@ -110,10 +120,10 @@ class VenueManager:
             return operating_venues if operating_venues else None
 
         except ImportError:
-            logger.warning("requests または BeautifulSoup がインストールされていません")
+            logger.debug("requests または BeautifulSoup がインストールされていません")
             return None
         except Exception as e:
-            logger.warning(f"スクレイピング処理エラー: {e}")
+            logger.debug(f"スクレイピング処理エラー: {e}")
             return None
 
     def _parse_schedule_table(self, soup):
@@ -140,7 +150,25 @@ class VenueManager:
             return operating_venues if operating_venues else None
 
         except Exception as e:
-            logger.warning(f"テーブルパース処理エラー: {e}")
+            logger.debug(f"テーブルパース処理エラー: {e}")
+            return None
+
+    def _get_venues_from_database(self):
+        """データベースのレースデータから本日の開催場所を抽出"""
+        try:
+            from database.db_manager import get_db_manager
+            from datetime import datetime
+            
+            db = get_db_manager()
+            session = db.get_session()
+            try:
+                races = db.get_races_by_date(session, datetime.now())
+                venues = list(set([r.place or r.venue for r in races if (r.place or r.venue)]))
+                return sorted(venues) if venues else None
+            finally:
+                session.close()
+        except Exception as e:
+            logger.debug(f"DB抽出エラー: {e}")
             return None
 
     def _load_cache(self):
@@ -166,7 +194,7 @@ class VenueManager:
             return None
 
         except Exception as e:
-            logger.warning(f"キャッシュ読み込みエラー: {e}")
+            logger.debug(f"キャッシュ読み込みエラー: {e}")
             return None
 
     def _save_cache(self, venues):
@@ -177,7 +205,7 @@ class VenueManager:
                     {"date": datetime.now().isoformat(), "venues": venues}, f, ensure_ascii=False
                 )
         except Exception as e:
-            logger.warning(f"キャッシュ保存エラー: {e}")
+            logger.debug(f"キャッシュ保存エラー: {e}")
 
     def is_venue_operating(self, venue_name):
         """特定のレース場が開催中か判定"""
