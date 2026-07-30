@@ -10,6 +10,7 @@ import numpy as np
 
 import config
 from utils.logger import setup_logger
+from utils.venue_manager import VenueManager
 
 logger = setup_logger(__name__)
 
@@ -63,6 +64,7 @@ class EnsembleModel:
             "ml": 0.40,
             "rule_based": 0.25,
         }
+        self.venue_manager = VenueManager()
         logger.info("アンサンブルモデルを初期化")
 
     def predict_today(self):
@@ -85,10 +87,28 @@ class EnsembleModel:
                 return []
 
             predictions = []
+            now = datetime.now()
+            
             for race in races:
+                # 当日の場合、現在時刻より後のレースのみを処理
+                if period == "today":
+                    race_datetime = getattr(race, "date", None)
+                    if race_datetime:
+                        # 現在時刻より前のレースは除外
+                        if race_datetime <= now:
+                            logger.debug(f"レース {race.race_id} は過去のため除外")
+                            continue
+                
+                # 開催中のレース場のみを処理
+                venue_name = getattr(race, "place", None) or getattr(race, "venue", None)
+                if venue_name and not self.venue_manager.is_venue_operating(venue_name):
+                    logger.debug(f"レース場 {venue_name} は本日非開催のため除外")
+                    continue
+                
                 pred = self._predict_race(race)
                 if pred:
                     predictions.append(pred)
+            
             logger.info(f"{period}予測完了: {len(predictions)}件")
             return predictions
         except Exception as e:
