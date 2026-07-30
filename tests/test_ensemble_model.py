@@ -54,6 +54,11 @@ def test_predict_today_filters_started_races(monkeypatch):
 
     monkeypatch.setattr("database.db_manager.get_db_manager", lambda: FakeDB())
     monkeypatch.setattr("models.ensemble_model.datetime", FixedDateTime)
+    monkeypatch.setattr(
+        EnsembleModel,
+        "_get_operating_venues_today",
+        staticmethod(lambda: {"桐生", "戸田", "江戸川"}),
+    )
 
     predictions = EnsembleModel().predict_today()
 
