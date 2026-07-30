@@ -43,11 +43,14 @@ boat-race-predictor/
 ├── config.py              # 設定管理
 ├── requirements.txt       # Python依存関係
 ├── .env.example          # 環境変数テンプレート
+├── scripts/
+│   ├── fetch_real_races.py    # 公式サイトから実レースデータ取得
+│   └── init_test_data.py      # テストデータ生成（非推奨：本番運用では使用しない）
 ├── scheduler/
 │   └── task_scheduler.py  # タスクスケジューラー
 ├── scrapers/
 │   ├── boat_race_scraper.py  # データスクレイピング
-│   └── official_scraper.py   # 公式サイトスクレイプ
+│   └── official_scraper.py   # 公式サイトスクレップ
 ├── models/
 │   ├── ensemble_model.py   # アンサンブルモデル
 │   ├── neural_network.py   # ニューラルネットワーク
@@ -58,6 +61,7 @@ boat-race-predictor/
 │   └── telegram_notifier.py # Telegram通知
 ├── utils/
 │   ├── logger.py          # ロギング設定
+│   ├── venue_manager.py   # レース場の開催情報管理
 │   ├── database.py        # データベース接続
 │   └── helpers.py         # ユーティリティ関数
 └── tests/
@@ -69,8 +73,7 @@ boat-race-predictor/
 
 ### 前提条件
 - Python 3.8以上
-- PostgreSQL 12以上
-- Redis（オプション）
+- SQLite（デフォルト）またはPostgreSQL 12以上
 
 ### セットアップ手順
 
@@ -99,11 +102,6 @@ cp .env.example .env
 # .envファイルを編集して設定値を入力
 ```
 
-5. **データベースを初期化**
-```bash
-python -m alembic upgrade head
-```
-
 ## ⚙️ 設定
 
 ### 環境変数の設定
@@ -112,7 +110,7 @@ python -m alembic upgrade head
 
 #### データベース
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/boat_race_db
+DATABASE_URL=sqlite:///boat_race.db
 ```
 
 #### メール通知
@@ -148,49 +146,54 @@ NN_DROPOUT_RATE=0.3
 
 ## 💻 使用方法
 
-### 初回セットアップ
-```bash
-python scripts/init_test_data.py
-```
-テストデータを生成します（当日6件以上、過去30日間の履歴データ）。
+### 🔴 重要: 本番運用モード（推奨）
 
-### 動作確認
+#### 1. 実レースデータを公式サイトから取得
 ```bash
-python scripts/verify_app.py
+python scripts/fetch_real_races.py
 ```
+- ボートレース公式サイト (boatrace.jp) から実レースデータを自動取得
+- 当日と翌日のレースデータをDBに保存
+- データは自動的にリアルタイムで更新
 
-### 1. 起動方法を表示
+#### 2. 当日予測を実行
+```bash
+python main.py --mode predict-today
+```
+- 本日開催中のレース場のみを表示
+- 購入可能なレースのみを対象（開始10分前まで購入可能）
+- 信頼度70%以上の高精度予測をハイライト
+
+#### 3. 翌日予測を実行
+```bash
+python main.py --mode predict-tomorrow
+```
+- 翌日開催予定のレース場のみを表示
+- すべてのレースが対象（購入締め切り確認なし）
+
+### 起動方法
+
+#### 1. 起動オプションを表示
 ```bash
 python main.py
 ```
 
-### 2. 当日予測を即座に実行
-```bash
-python main.py --mode predict-today
-```
-購入可能な予想（信頼度 70%以上）を含む当日の全予想を表示します。
-
-### 3. 翌日予測を即座に実行
-```bash
-python main.py --mode predict-tomorrow
-```
-
-### 4. パフォーマンス分析を実行
+#### 2. パフォーマンス分析を実行
 ```bash
 python main.py --mode analyze
 ```
 
-### 5. モデルの再トレーニング
+#### 3. モデルの再トレーニング
 ```bash
 python main.py --mode retrain
 ```
 
-### 6. 統計情報を表示
+#### 4. 統計情報を表示
 ```bash
 python main.py --mode stats
 ```
 
-### 7. Web UI を起動（ブラウザからアクセス）
+#### 5. Web UI を起動（ブラウザからアクセス）
 ```bash
 python main.py --mode run-server
 # → http://localhost:5000/ でアクセス可能
@@ -203,7 +206,7 @@ Web UI 機能：
 - 的中率分析
 - 設定画面
 
-### 8. 連続実行モード（スケジューラー）
+#### 6. 連続実行モード（スケジューラー）
 ```bash
 python main.py --mode run
 ```
@@ -219,14 +222,18 @@ python main.py --debug
 ### 予測パイプライン
 
 ```
-データ取得
+公式サイトから実レースデータ取得
     ↓
-前処理・特徴量エンジニアリング
+レース場の開催情報を取得（リアルタイム）
+    ↓
+開催中のレース場のみをフィルタリング
+    ↓
+購入可能なレースのみを対象（当日のみ）
     ↓
 複数モデルによる予測
-    ├─ ニューラルネットワーク
-    ├─ XGBoost
-    └─ ランダムフォレスト
+├─ ニューラルネットワーク
+├─ XGBoost
+└─ ランダムフォレスト
     ↓
 アンサンブル（重み付き平均）
     ↓
@@ -253,23 +260,36 @@ python main.py --debug
 
 ## 🔧 トラブルシューティング
 
+### 非開催のレース場が表示される
+```
+❌ 児島競艇場が表示されているが、公式サイトでは開催していない
+```
+**解決策**: 
+1. `python scripts/fetch_real_races.py` を再実行して最新データを取得
+2. VenueManagerが公式サイトから正しく開催情報を取得しているか確認
+3. `rm boat_race.db` でDBをリセットしてから再度実行
+
+### レースデータが取得されない
+```
+Error: Failed to fetch races from official site
+```
+**解決策**: 
+1. インターネット接続を確認
+2. boatrace.jpが正常にアクセスできるか確認
+3. requests と BeautifulSoup がインストールされているか確認
+4. User-Agentがブロックされていないか確認
+
 ### データベース接続エラー
 ```
 Error: could not connect to server
 ```
-**解決策**: PostgreSQLが起動しているか、CONNECTION_URLが正しいか確認
+**解決策**: SQLiteの場合は自動作成されます。PostgreSQLの場合は接続情報を確認
 
 ### メール送信エラー
 ```
 Error: SMTP authentication failed
 ```
 **解決策**: Gmailの場合、アプリパスワードを使用してください
-
-### スクレイピングエラー
-```
-Error: Failed to scrape data
-```
-**解決策**: Webサイトの仕様変更の可能性があります。スクレイパーの更新が必要です
 
 ### モデル予測エラー
 ```
@@ -324,16 +344,18 @@ pytest tests/test_models.py -v
 - scikit-learn
 - XGBoost
 - APScheduler
+- requests
+- BeautifulSoup4
 
 ## 📞 サポート
 
 問題が発生した場合は、以下をご確認ください：
 
 1. `.env`ファイルの設定が正しいか
-2. データベースが起動しているか
-3. 必要なPythonパッケージがインストールされているか
+2. 依存パッケージがすべてインストールされているか
+3. ボートレース公式サイト (boatrace.jp) にアクセスできるか
 4. ログファイルにエラーメッセージがないか
 
 ---
 
-**最終更新**: 2026年7月23日
+**最終更新**: 2026年7月30日
