@@ -24,7 +24,7 @@ def _buy_label(confidence: float) -> str:
 
 def _display_predictions(predictions: list, title: str) -> None:
     """予測結果をCLI形式で表示"""
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     print()
     print("━" * 50)
     print(f"ボートレース予測システム v1.0")
@@ -34,8 +34,7 @@ def _display_predictions(predictions: list, title: str) -> None:
     print()
 
     if not predictions:
-        print("  予測データがありません。")
-        print("  python scripts/init_test_data.py でテストデータを追加してください。")
+        print("  今から購入できるレースがありません。")
         print()
         return
 
@@ -45,6 +44,8 @@ def _display_predictions(predictions: list, title: str) -> None:
         predicted_order = pred.get("predicted_order") or pred.get("prediction", [])
         confidence = float(pred.get("confidence", 0.0))
         reason = pred.get("reason", "")
+        time_remaining = pred.get("time_remaining_minutes")
+        hole_bets_data = pred.get("hole_bets", {})
 
         # 買い目を "1-2-3" 形式に
         if isinstance(predicted_order, list) and predicted_order:
@@ -61,6 +62,20 @@ def _display_predictions(predictions: list, title: str) -> None:
         border_bot = "└" + "─" * (width + 2) + "┘"
 
         print(border_top)
+
+        # レース開始までの時間
+        if time_remaining is not None:
+            h = time_remaining // 60
+            m = time_remaining % 60
+            if h > 0:
+                time_str = f"あと {h}時間 {m}分"
+            else:
+                time_str = f"あと {m}分"
+            print(f"│ レース開始まで: {time_str:<29}│")
+            print(f"│{' ' * 46}│")
+
+        # 通常買い目
+        print(f"│ 【通常買い目】{' ' * 32}│")
         print(f"│ 推奨買い目: {buy_pattern:<34}│")
         stars_str = _stars(confidence)
         label = _buy_label(confidence)
@@ -68,6 +83,22 @@ def _display_predictions(predictions: list, title: str) -> None:
         print(f"│ 信頼度: {conf_str:<36}│")
         if reason:
             print(f"│ 理由: {reason:<38}│")
+
+        # 穴狙い買い目
+        hole_bets = hole_bets_data.get("bets", [])
+        hole_conf_list = hole_bets_data.get("confidence", [])
+        if hole_bets:
+            print(f"│{' ' * 46}│")
+            print(f"│ 【穴狙い買い目】{' ' * 30}│")
+            hole_patterns = " / ".join(
+                "-".join(str(x) for x in bet) for bet in hole_bets
+            )
+            print(f"│ 穴狙い: {hole_patterns:<37}│")
+            avg_hole_conf = sum(hole_conf_list) / len(hole_conf_list) if hole_conf_list else 0.0
+            hole_stars = _stars(avg_hole_conf)
+            hole_conf_str = f"{hole_stars} {avg_hole_conf:.2f} (ハイリスク・ハイリターン)"
+            print(f"│ 信頼度: {hole_conf_str:<36}│")
+
         print(border_bot)
         print()
 
