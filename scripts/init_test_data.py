@@ -75,7 +75,7 @@ def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: flo
 
 
 def create_today_races(session, db, target_date: datetime, num_races: int = 6) -> list:
-    """当日のレースデータを作成（現在時刻より後のレースのみ）"""
+    """当日のレースデータを作成（現在時刻より30分以上後のレースのみ）"""
     now = datetime.now()
     
     # 本日開催中のレース場（実際のボートレース場から選抜）
@@ -92,16 +92,17 @@ def create_today_races(session, db, target_date: datetime, num_races: int = 6) -
     
     venues_today = random.sample(operating_venues, min(num_races, len(operating_venues)))
     
-    # 現在時刻より後のレースを生成
+    # 現在時刻より30分以上後のレースを生成
     current_hour = now.hour
     current_minute = now.minute
     
-    # 現在時刻の15分後から始まるレースを生成（30分刻み）
-    start_hour = current_hour
-    if current_minute >= 30:
-        start_hour += 1
+    # 最初のレースは30分以上後
+    if current_minute < 30:
+        start_hour = current_hour + 1  # 次の時間の00分
+    else:
+        start_hour = current_hour + 1  # 次の時間の00分
     
-    # 生成するレース時刻（現在時刻の後）
+    # 生成するレース時刻（現在時刻の30分以上後）
     hours = []
     for i in range(num_races):
         race_hour = start_hour + i
@@ -110,7 +111,7 @@ def create_today_races(session, db, target_date: datetime, num_races: int = 6) -
     
     # 時刻が不足する場合はランダムに生成
     while len(hours) < num_races:
-        hours.append(random.randint(15, 22))
+        hours.append(random.randint(start_hour, 22))
     
     hours = hours[:num_races]
     
@@ -119,7 +120,7 @@ def create_today_races(session, db, target_date: datetime, num_races: int = 6) -
         if i < len(hours):
             hour = hours[i]
         else:
-            hour = random.randint(15, 22)
+            hour = random.randint(start_hour, 22)
         
         race_data = _make_race(target_date, venue, i + 1, hour)
         # 既存チェック
@@ -187,7 +188,7 @@ def main():
         today = datetime.now()
         tomorrow = today + timedelta(days=1)
 
-        # 当日レース（現在時刻より後のみ）
+        # 当日レース（現在時刻より30分以上後のみ）
         print("📅 当日レースデータを作成中...")
         print(f"   現在時刻: {today.strftime('%H:%M:%S')}")
         today_races = create_today_races(session, db, today, num_races=6)
