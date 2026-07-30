@@ -54,6 +54,19 @@ def _make_prediction_order(race_number: int, weather: str) -> list:
     return base[:3]
 
 
+def _calculate_hole_bets(predicted_order: list) -> dict:
+    """穴狙い買い目を計算（高配当が期待できる組み合わせ）"""
+    if len(predicted_order) < 3:
+        return {"bets": [], "confidence": []}
+    # 穴狙い: 2番手が1着 or 3番手が1着のパターン
+    hole_bets = [
+        [predicted_order[1], predicted_order[0], predicted_order[2]],
+        [predicted_order[2], predicted_order[0], predicted_order[1]],
+    ]
+    hole_confidence = [0.25, 0.22]
+    return {"bets": hole_bets, "confidence": hole_confidence}
+
+
 class EnsembleModel:
     """複数モデルのアンサンブル予測"""
 
@@ -84,10 +97,21 @@ class EnsembleModel:
                 logger.warning(f"{period}のレースデータがありません")
                 return []
 
+            now = datetime.now()
+
+            # 当日は現在時刻より後のレースのみを対象にする
+            if period == "today":
+                races = [r for r in races if getattr(r, "date", None) and r.date > now]
+                logger.info(f"{period}の購入可能なレース: {len(races)}件")
+
             predictions = []
             for race in races:
                 pred = self._predict_race(race)
                 if pred:
+                    if period == "today":
+                        date_val = getattr(race, "date", now)
+                        time_remaining = (date_val - now).total_seconds() / 60
+                        pred["time_remaining_minutes"] = max(0, int(time_remaining))
                     predictions.append(pred)
             logger.info(f"{period}予測完了: {len(predictions)}件")
             return predictions
@@ -124,6 +148,7 @@ class EnsembleModel:
                 "predicted_order": predicted_order,
                 "confidence": round(confidence, 2),
                 "reason": reason,
+                "hole_bets": _calculate_hole_bets(predicted_order),
                 "timestamp": datetime.now().isoformat(),
             }
         except Exception as e:
