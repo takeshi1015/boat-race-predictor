@@ -10,6 +10,7 @@ import numpy as np
 
 import config
 from utils.logger import setup_logger
+from utils.venue_manager import VenueManager
 
 logger = setup_logger(__name__)
 
@@ -63,12 +64,17 @@ class EnsembleModel:
             "ml": 0.40,
             "rule_based": 0.25,
         }
+        self.venue_manager = VenueManager()
         logger.info("アンサンブルモデルを初期化")
 
     def predict_today(self):
         """当日の予測を実行"""
         logger.info("当日予測を開始")
         return self._predict_for_period("today")
+
+    def get_today_operating_venues(self) -> list:
+        """本日開催中のレース場リストを返す"""
+        return self.venue_manager.get_operating_venues_today()
 
     def predict_tomorrow(self):
         """翌日の予測を実行"""
@@ -83,6 +89,19 @@ class EnsembleModel:
             if not races:
                 logger.warning(f"{period}のレースデータがありません")
                 return []
+
+            # 当日予測の場合は開催中のレース場のみに絞り込む
+            if period == "today":
+                operating_venues = self.venue_manager.get_operating_venues_today()
+                logger.info(f"本日開催中のレース場: {operating_venues}")
+                races = [
+                    r for r in races
+                    if (
+                        getattr(r, "venue", None) in operating_venues
+                        or getattr(r, "place", None) in operating_venues
+                    )
+                ]
+                logger.info(f"開催中レース場でフィルタリング後: {len(races)}件")
 
             predictions = []
             for race in races:

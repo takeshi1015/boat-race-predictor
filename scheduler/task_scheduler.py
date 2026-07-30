@@ -22,7 +22,7 @@ def _buy_label(confidence: float) -> str:
     return "購入可能" if confidence >= 0.7 else "参考情報"
 
 
-def _display_predictions(predictions: list, title: str) -> None:
+def _display_predictions(predictions: list, title: str, operating_venues: list | None = None) -> None:
     """予測結果をCLI形式で表示"""
     today_str = datetime.now().strftime("%Y-%m-%d")
     print()
@@ -32,6 +32,17 @@ def _display_predictions(predictions: list, title: str) -> None:
     print()
     print(f"【{title}】 {today_str}")
     print()
+
+    # 本日開催中のレース場を表示（当日予想の場合）
+    if operating_venues is not None:
+        if operating_venues:
+            print("本日開催中のレース場:")
+            chunks = [operating_venues[i:i + 4] for i in range(0, len(operating_venues), 4)]
+            for chunk in chunks:
+                print("  " + " / ".join(f"✅ {v}" for v in chunk))
+        else:
+            print("  本日の開催情報を取得できませんでした。")
+        print()
 
     if not predictions:
         print("  予測データがありません。")
@@ -117,7 +128,9 @@ class TaskScheduler:
         logger.info("=" * 60)
         logger.info("当日予測タスクを開始")
         try:
-            predictions = self._get_model().predict_today()
+            model = self._get_model()
+            operating_venues = model.get_today_operating_venues()
+            predictions = model.predict_today()
             logger.info(f"当日予測完了: {len(predictions)}レース")
 
             high_confidence = [p for p in predictions if float(p.get("confidence", 0)) >= 0.7]
@@ -126,7 +139,7 @@ class TaskScheduler:
             else:
                 logger.info("信頼度0.7以上の予測はありません")
 
-            _display_predictions(predictions, "当日予想")
+            _display_predictions(predictions, "当日予想", operating_venues=operating_venues)
         except Exception as e:
             logger.error(f"当日予測エラー: {e}", exc_info=True)
             print(f"❌ 当日予測エラー: {e}")
