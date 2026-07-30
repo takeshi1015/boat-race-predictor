@@ -51,6 +51,7 @@ class VenueManager:
         # キャッシュから取得を試みる
         cached_venues = self._load_cache()
         if cached_venues is not None:
+            logger.info(f"キャッシュから取得: {cached_venues}")
             return cached_venues
 
         # 公式サイトからスクレイピング
@@ -58,14 +59,14 @@ class VenueManager:
             operating = self._fetch_from_official_site()
             if operating:
                 self._save_cache(operating)
+                logger.info(f"公式サイトから取得: {operating}")
                 return operating
         except Exception as e:
             logger.warning(f"公式サイトからのスクレイピング失敗: {e}")
 
-        # フォールバック: デフォルト開催場所
-        default_venues = self._get_default_operating_venues()
-        logger.info(f"デフォルト開催場所を使用: {default_venues}")
-        return default_venues
+        # フォールバック: 空のリスト（開催情報がない場合）
+        logger.warning("開催場所情報を取得できません")
+        return []
 
     def _fetch_from_official_site(self):
         """ボートレース公式サイトからスクレイピング"""
@@ -141,22 +142,6 @@ class VenueManager:
         except Exception as e:
             logger.warning(f"テーブルパース処理エラー: {e}")
             return None
-
-    def _get_default_operating_venues(self):
-        """デフォルトの開催場所（スクレイピング失敗時）"""
-        # 通常、毎日6～8場が開催
-        # 2026-07-30 の実際の開催場所を設定
-        default = [
-            "丸亀",      # 香川県
-            "児島",      # 岡山県
-            "宮島",      # 広島県
-            "芦屋",      # 福岡県
-            "福岡",      # 福岡県
-            "唐津",      # 佐賀県
-            "大村",      # 長崎県
-            "びわこ",    # 滋賀県
-        ]
-        return default
 
     def _load_cache(self):
         """キャッシュから読み込み"""
