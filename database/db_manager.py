@@ -155,6 +155,15 @@ class DatabaseManager:
     def get_predictions_by_race(self, session: Session, race_id: str) -> List[Prediction]:
         """Get predictions for race"""
         return session.query(Prediction).filter_by(race_id=race_id).all()
+
+    def get_latest_prediction_by_race(
+        self, session: Session, race_id: str, prediction_type: Optional[str] = None
+    ) -> Optional[Prediction]:
+        """Get latest prediction for a race."""
+        query = session.query(Prediction).filter(Prediction.race_id == race_id)
+        if prediction_type:
+            query = query.filter(Prediction.prediction_type == prediction_type)
+        return query.order_by(Prediction.prediction_date.desc()).first()
     
     def get_recent_predictions(self, session: Session, days: int = 7) -> List[Prediction]:
         """Get recent predictions"""
@@ -176,6 +185,44 @@ class DatabaseManager:
             prediction.updated_at = datetime.now()
             session.commit()
         return prediction
+
+    def sync_prediction_results_from_races(self, session: Session, days: int = 30) -> int:
+        """Sync `Prediction.result` from actual `Race.result`."""
+        cutoff_date = datetime.now() - timedelta(days=days)
+        predictions = session.query(Prediction).filter(
+            Prediction.prediction_date >= cutoff_date
+        ).all()
+        updated = 0
+
+        for prediction in predictions:
+            race = session.query(Race).filter(Race.race_id == prediction.race_id).first()
+            race_result = race.result if race else None
+            if not race_result:
+                continue
+
+            actual_order = race_result.get("order")
+            if not isinstance(actual_order, list) or len(actual_order) < 3:
+                continue
+
+            predicted_order = prediction.predicted_order or []
+            if not isinstance(predicted_order, list) or len(predicted_order) < 3:
+                continue
+
+            is_hit = predicted_order[:3] == actual_order[:3]
+            payout = float(race_result.get("trifecta_odds", 0.0)) if is_hit else 0.0
+            prediction.result = {
+                "is_hit": is_hit,
+                "actual_order": actual_order[:3],
+                "actual_odds": payout,
+                "updated_from": "race.result",
+                "updated_at": datetime.now().isoformat(),
+            }
+            prediction.updated_at = datetime.now()
+            updated += 1
+
+        if updated:
+            session.commit()
+        return updated
     
     # ============================================================================
     # Performance Operations

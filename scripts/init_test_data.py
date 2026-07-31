@@ -55,8 +55,11 @@ def _make_race(date: datetime, venue: str, race_number: int, hour: int) -> dict:
     }
 
 
-def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: float) -> dict:
-    predicted_order = [1, 2, 3] if is_hit else [2, 3, 1]
+def _make_prediction(race_id: str, date: datetime, actual_order: list, is_hit: bool, confidence: float) -> dict:
+    if is_hit:
+        predicted_order = actual_order[:3]
+    else:
+        predicted_order = actual_order[1:3] + [actual_order[0]]
     # 実際のオッズはランダムに生成（テスト用シミュレーションデータ）
     actual_odds = round(random.uniform(2.0, 50.0), 1)
     return {
@@ -141,6 +144,16 @@ def create_historical_data(session, db, days: int = 30) -> int:
         for i, venue in enumerate(venues_day):
             hour = hours[i % len(hours)]
             race_data = _make_race(target_date, venue, i + 1, hour)
+            actual_order = random.sample([1, 2, 3, 4, 5, 6], 3)
+            race_data["result"] = {
+                "order": actual_order,
+                "first": actual_order[0],
+                "second": actual_order[1],
+                "third": actual_order[2],
+                "trifecta_odds": round(random.uniform(2.0, 50.0), 1),
+                "source": "test_data",
+                "fetched_at": datetime.now().isoformat(),
+            }
 
             existing = db.get_race(session, race_data["race_id"])
             if existing:
@@ -155,7 +168,7 @@ def create_historical_data(session, db, days: int = 30) -> int:
             # 過去予測（的中率 ~55%）
             is_hit = random.random() < 0.55
             confidence = round(random.uniform(0.55, 0.90), 2)
-            pred_data = _make_prediction(race_id, target_date, is_hit, confidence)
+            pred_data = _make_prediction(race_id, target_date, actual_order, is_hit, confidence)
             pred = Prediction(**pred_data)
             session.add(pred)
             total_predictions += 1

@@ -18,8 +18,12 @@ def _stars(confidence: float) -> str:
 
 
 # 購入可否ラベル
-def _buy_label(confidence: float) -> str:
-    return "購入可能" if confidence >= 0.7 else "参考情報"
+def _buy_label(confidence: float, is_purchasable=None) -> str:
+    if is_purchasable is True:
+        return "購入可能"
+    if is_purchasable is False:
+        return "締切済み"
+    return "参考情報"
 
 
 def _display_predictions(predictions: list, title: str) -> None:
@@ -63,7 +67,7 @@ def _display_predictions(predictions: list, title: str) -> None:
         print(border_top)
         print(f"│ 推奨買い目: {buy_pattern:<34}│")
         stars_str = _stars(confidence)
-        label = _buy_label(confidence)
+        label = _buy_label(confidence, pred.get("is_purchasable"))
         conf_str = f"{stars_str} {confidence:.2f} ({label})"
         print(f"│ 信頼度: {conf_str:<36}│")
         if reason:

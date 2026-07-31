@@ -7,8 +7,8 @@ from datetime import datetime
 import json
 import os
 import logging
-import requests
-from bs4 import BeautifulSoup
+
+from utils.official_data_client import OfficialDataClient
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +46,7 @@ class VenueManager:
     def __init__(self):
         self.cache_file = "venue_schedule.json"
         self.cache_expiry_hours = 3  # 3時間でキャッシュ無効
-        self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        })
+        self.client = OfficialDataClient(timeout=10)
 
     def get_operating_venues_today(self):
         """
@@ -117,59 +114,8 @@ class VenueManager:
         try:
             if target_date is None:
                 target_date = datetime.now()
-
-            date_str = target_date.strftime("%Y%m%d")
-            url = f"{self.BASE_URL}/race/schedule"
-            params = {"date": date_str}
-
-            response = self.session.get(url, params=params, timeout=10)
-            response.encoding = "utf-8"
-
-            if response.status_code != 200:
-                logger.debug(f"HTTP {response.status_code}")
-                return None
-
-            soup = BeautifulSoup(response.content, "html.parser")
-
-            # 開催中のレース場を抽出
-            operating_venues = []
-
-            # 方法1: schedule-listクラスから抽出
-            schedule_list = soup.find("div", class_="schedule-list")
-            if schedule_list:
-                items = schedule_list.find_all("div", class_="schedule-item")
-                for item in items:
-                    venue_name = self._extract_venue_name(item.get_text(strip=True))
-                    if venue_name and venue_name not in operating_venues:
-                        operating_venues.append(venue_name)
-
-            # 方法2: テーブルから抽出
-            if not operating_venues:
-                tables = soup.find_all("table")
-                for table in tables:
-                    rows = table.find_all("tr")
-                    for row in rows:
-                        cells = row.find_all(["td", "th"])
-                        for cell in cells:
-                            venue_name = self._extract_venue_name(cell.get_text(strip=True))
-                            if venue_name and venue_name not in operating_venues:
-                                operating_venues.append(venue_name)
-
-            # 方法3: リンクから抽出
-            if not operating_venues:
-                for link in soup.find_all("a", href=True):
-                    href = link["href"]
-                    # /race/schedule?date=YYYYMMDD&jyo=XX のようなURL
-                    if "/race/schedule" in href and "jyo=" in href:
-                        # URLから会場コードを抽出
-                        jyo_code = href.split("jyo=")[-1].split("&")[0]
-                        for venue_name, info in self.ALL_VENUES.items():
-                            if info["code"] == jyo_code:
-                                if venue_name not in operating_venues:
-                                    operating_venues.append(venue_name)
-                                break
-
-            return sorted(operating_venues) if operating_venues else None
+            operating_venues = self.client.fetch_operating_venues(target_date)
+            return operating_venues if operating_venues else None
 
         except Exception as e:
             logger.debug(f"スクレイピング処理エラー: {e}")

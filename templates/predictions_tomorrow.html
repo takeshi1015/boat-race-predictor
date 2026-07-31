@@ -28,8 +28,6 @@
 
 {% block scripts_extra %}
 <script>
-const CONFIDENCE_THRESHOLD = 0.7;
-
 function starsHtml(confidence) {
   const filled = Math.round(confidence * 5);
   return "⭐".repeat(filled) + "☆".repeat(5 - filled);
@@ -42,8 +40,8 @@ function badgeClass(confidence) {
   return "bg-secondary";
 }
 
-function labelText(confidence) {
-  return confidence >= CONFIDENCE_THRESHOLD ? "購入可能" : "参考情報";
+function labelText(isPurchasable) {
+  return isPurchasable ? "購入可能" : "参考情報";
 }
 
 async function loadPredictions() {
@@ -76,10 +74,11 @@ async function loadPredictions() {
       const order = (pred.predicted_order || []).join("-") || "-";
       const conf = pred.confidence || 0;
       const confPct = (conf * 100).toFixed(1);
+      const isPurchasable = pred.is_purchasable !== false;
       const card = document.createElement("div");
       card.className = "col-md-6 col-lg-4";
       card.innerHTML = `
-        <div class="card shadow-sm h-100 ${conf >= CONFIDENCE_THRESHOLD ? 'border-primary' : ''}">
+        <div class="card shadow-sm h-100 ${isPurchasable ? 'border-primary' : ''}">
           <div class="card-header d-flex justify-content-between align-items-center">
             <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
             <span class="badge bg-secondary">${pred.race_number}レース</span>
@@ -91,14 +90,14 @@ async function loadPredictions() {
             </div>
             <div class="d-flex justify-content-between align-items-center mb-2">
               <span class="text-muted small">信頼度</span>
-              <span class="badge ${badgeClass(conf)}">${labelText(conf)}</span>
+              <span class="badge ${badgeClass(conf)}">${labelText(isPurchasable)}</span>
             </div>
             <div class="d-flex align-items-center gap-2 mb-2">
               <span class="text-warning">${starsHtml(conf)}</span>
               <span class="fw-bold">${confPct}%</span>
             </div>
             <div class="progress mb-3" style="height:8px">
-              <div class="progress-bar ${conf >= CONFIDENCE_THRESHOLD ? 'bg-primary' : 'bg-secondary'}"
+              <div class="progress-bar ${isPurchasable ? 'bg-primary' : 'bg-secondary'}"
                    style="width:${confPct}%"></div>
             </div>
             ${pred.reason ? `<p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>${pred.reason}</p>` : ""}
