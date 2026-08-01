@@ -29,6 +29,7 @@ class BoatraceDataFetcher:
         "09": "浜名湖", "10": "蒲郡", "11": "常滑", "12": "津",
         "13": "三国", "14": "びわこ", "15": "丸亀", "16": "児島",
         "17": "宮島", "18": "芦屋", "19": "福岡", "20": "唐津", "21": "大村",
+        "22": "下関", "23": "若松", "24": "徳山",
     }
 
     # 各会場のレース時間パターン（会場ごとの開催時間）
@@ -81,6 +82,12 @@ class BoatraceDataFetcher:
                (14, 15), (14, 45), (15, 15), (15, 45), (16, 15), (16, 45)],  # 宮島
         "19": [(11, 15), (11, 45), (12, 15), (12, 45), (13, 15), (13, 45),
                (14, 15), (14, 45), (15, 15), (15, 45), (16, 15), (16, 45)],  # 福岡
+        "22": [(11, 15), (11, 45), (12, 15), (12, 45), (13, 15), (13, 45),
+               (14, 15), (14, 45), (15, 15), (15, 45), (16, 15), (16, 45)],  # 下関
+        "23": [(11, 15), (11, 45), (12, 15), (12, 45), (13, 15), (13, 45),
+               (14, 15), (14, 45), (15, 15), (15, 45), (16, 15), (16, 45)],  # 若松
+        "24": [(10, 50), (11, 20), (11, 50), (12, 20), (12, 50), (13, 20),
+               (13, 50), (14, 20), (14, 50), (15, 20), (15, 50), (16, 20)],  # 徳山
     }
 
     def __init__(self):
@@ -96,12 +103,8 @@ class BoatraceDataFetcher:
 
         logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
 
-        # 実際の開催会場を取得
-        active_venue_codes = self._fetch_active_venues(target_date)
-        logger.info(f"   対象会場: {len(active_venue_codes)}場")
-
-        # 開催会場のレースを生成
-        races = self._generate_all_venues_races(target_date, active_venue_codes)
+        # 全24会場のレースを生成
+        races = self._generate_all_venues_races(target_date, None)
         logger.info(f"📊 合計 {len(races)}件のレースを取得")
 
         return races
@@ -173,6 +176,7 @@ class BoatraceDataFetcher:
                     "09": "sunny", "10": "cloudy", "11": "rainy", "12": "sunny",
                     "13": "cloudy", "14": "sunny", "15": "sunny", "16": "cloudy",
                     "17": "rainy", "18": "cloudy", "19": "sunny", "20": "cloudy", "21": "rainy",
+                    "22": "sunny", "23": "cloudy", "24": "sunny",
                 }
                 
                 water_map = {
@@ -181,6 +185,7 @@ class BoatraceDataFetcher:
                     "09": "calm", "10": "moderate", "11": "rough", "12": "calm",
                     "13": "slight", "14": "calm", "15": "calm", "16": "moderate",
                     "17": "rough", "18": "slight", "19": "calm", "20": "moderate", "21": "moderate",
+                    "22": "slight", "23": "calm", "24": "slight",
                 }
                 
                 race_data = {
