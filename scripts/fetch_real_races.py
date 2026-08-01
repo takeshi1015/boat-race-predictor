@@ -100,16 +100,15 @@ class BoatraceDataFetcher:
         """全24会場のテストレースを生成"""
         races = []
         
-        # ボートレースは9:30～20:30まで（昼間帯と夜間帯）
+        # ボートレースは9:30～20:30まで（12レース）
         race_times = [
             (9, 30), (10, 30), (11, 30), (12, 30), (13, 30), (14, 30),
-            (15, 30), (16, 30), (17, 30), (18, 0), (18, 30), (19, 0),
-            (19, 30), (20, 0), (20, 30)
+            (15, 30), (16, 30), (17, 30), (18, 0), (18, 30), (19, 0)
         ]
         
         for venue_code, venue_name in sorted(self.VENUES.items()):
-            for race_num in range(1, 16):  # 15レース
-                hour, minute = race_times[race_num - 1] if race_num - 1 < len(race_times) else (20, 30)
+            for race_num in range(1, 13):  # 12レース
+                hour, minute = race_times[race_num - 1] if race_num - 1 < len(race_times) else (19, 0)
                 
                 race_date = target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
                 
