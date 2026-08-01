@@ -29,7 +29,7 @@ _WATER_REASONS = {
 }
 
 # ボートレースの購入締め切り時間（レース開始の何分前まで購入可能か）
-RACE_TICKET_CUTOFF_MINUTES = 10
+RACE_TICKET_CUTOFF_MINUTES = 3
 
 
 def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -> float:
@@ -114,21 +114,22 @@ class EnsembleModel:
             for race in races:
                 # 開催中のレース場のみを処理
                 venue_name = getattr(race, "place", None) or getattr(race, "venue", None)
+                race_datetime = getattr(race, "date", None)
+                race_num = getattr(race, "race_number", "?")
                 
                 # 開催中か確認
                 if venue_name not in operating_venues:
-                    logger.debug(f"❌ {venue_name} {race.race_number}R - レース場が非開催のため除外")
+                    logger.debug(f"❌ {venue_name} {race_num}R - レース場が非開催のため除外")
                     continue
                 
                 # 当日のみ購入可能性を確認（翌日は時刻チェック不要）
                 if period == "today":
-                    race_datetime = getattr(race, "date", None)
                     if race_datetime and not _is_race_purchasable(race_datetime):
-                        logger.debug(f"❌ {venue_name} {race.race_number}R {race_datetime.strftime('%H:%M')} - 購入締め切り終了のため除外")
+                        logger.debug(f"❌ {venue_name} {race_num}R {race_datetime.strftime('%H:%M')} - 購入締め切り終了のため除外")
                         continue
                 
-                race_datetime = getattr(race, "date", None)
-                logger.debug(f"✅ {venue_name} {race.race_number}R {race_datetime.strftime('%H:%M') if race_datetime else '?'} - 予測対象")
+                time_str = race_datetime.strftime('%H:%M') if race_datetime else '?'
+                logger.debug(f"✅ {venue_name} {race_num}R {time_str} - 予測対象")
                 
                 pred = self._predict_race(race)
                 if pred:
