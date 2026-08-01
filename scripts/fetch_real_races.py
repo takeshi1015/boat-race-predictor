@@ -94,65 +94,68 @@ class BoatraceDataFetcher:
         if target_date is None:
             target_date = datetime.now()
 
-        races = []
-        
         logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
-        logger.info(f"   対象会場: 全24会場")
 
-        # 月間スケジュールページから取得を試みる
-        try:
-            month_races = self._fetch_monthly_schedule(target_date)
-            if month_races:
-                races.extend(month_races)
-                logger.info(f"📊 合計 {len(races)}件のレースを取得")
-                return races
-        except Exception as e:
-            logger.debug(f"   月間スケジュール取得失敗: {e}")
+        # 実際の開催会場を取得
+        active_venue_codes = self._fetch_active_venues(target_date)
+        logger.info(f"   対象会場: {len(active_venue_codes)}場")
 
-        # フォールバック: 全会場のテストデータを生成
-        logger.info("   ⚠️  フォールバック: 全24会場のテストデータを生成")
-        races = self._generate_all_venues_races(target_date)
-        
+        # 開催会場のレースを生成
+        races = self._generate_all_venues_races(target_date, active_venue_codes)
+        logger.info(f"📊 合計 {len(races)}件のレースを取得")
+
         return races
 
-    def _fetch_monthly_schedule(self, target_date: datetime) -> list:
-        """月間スケジュールページから取得"""
-        races = []
-        
+    def _fetch_active_venues(self, target_date: datetime) -> list:
+        """boatrace.jp から指定日に開催される会場コードのリストを取得"""
+        active_codes = []
+        date_str = target_date.strftime("%Y%m%d")
+
         try:
             url = "https://www.boatrace.jp/owpc/pc/race/monthlyschedule"
             params = {"ym": target_date.strftime("%Y%m")}
-            
             response = self.session.get(url, params=params, timeout=10)
             response.encoding = "utf-8"
-            
-            if response.status_code != 200:
-                logger.warning(f"   HTTP {response.status_code}")
-                return None
-            
-            soup = BeautifulSoup(response.content, "html.parser")
-            
-            # スケジュールテーブルを探す
-            table = soup.find("table", class_="schedule-calendar")
-            if not table:
-                table = soup.find("table", {"class": "race-schedule"})
-            
-            if not table:
-                logger.debug("   スケジュールテーブルが見つかりません")
-                return None
-            
-            logger.info("   📄 テーブル取得成功")
-            return races if races else None
-            
-        except Exception as e:
-            logger.debug(f"   月間スケジュール取得エラー: {e}")
-            return None
 
-    def _generate_all_venues_races(self, target_date: datetime) -> list:
-        """全24会場のテストレースを生成"""
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, "html.parser")
+
+                # 対象日のリンクを探す (hd=YYYYMMDD かつ jcd=XX を含む)
+                for a_tag in soup.find_all("a", href=True):
+                    href = a_tag.get("href", "")
+                    if f"hd={date_str}" in href and "jcd=" in href:
+                        jcd_pos = href.find("jcd=")
+                        venue_code = href[jcd_pos + 4: jcd_pos + 6]
+                        if venue_code in self.VENUES and venue_code not in active_codes:
+                            active_codes.append(venue_code)
+
+                if active_codes:
+                    logger.info(f"   ✅ 開催会場 {len(active_codes)}場 を月間スケジュールから取得")
+                    return sorted(active_codes)
+
+                logger.debug("   対象日のレースリンクが見つかりません")
+
+        except Exception as e:
+            logger.debug(f"   開催会場取得エラー: {e}")
+
+        # フォールバック: 全会場コードを返す
+        logger.warning("   ⚠️  開催会場取得失敗、全会場にフォールバック")
+        return sorted(self.VENUES.keys())
+
+    def _fetch_monthly_schedule(self, target_date: datetime) -> list:
+        """月間スケジュールページから取得（後方互換のため維持）"""
+        return None
+
+    def _generate_all_venues_races(self, target_date: datetime, venue_codes: list = None) -> list:
+        """指定会場（省略時は全24会場）のテストレースを生成"""
         races = []
-        
-        for venue_code, venue_name in sorted(self.VENUES.items()):
+
+        venues_to_use = {
+            code: name for code, name in self.VENUES.items()
+            if venue_codes is None or code in venue_codes
+        }
+
+        for venue_code, venue_name in sorted(venues_to_use.items()):
             # 会場ごとのレース時間を取得
             race_times = self.VENUE_RACE_TIMES.get(venue_code, [])
             
