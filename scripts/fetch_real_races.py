@@ -1,6 +1,6 @@
 """
 ボートレース公式サイトから実レースデータを取得するスクリプト
-全24会場の当日・翌日のレースを取得
+全21会場の当日・翌日のレースを取得
 """
 
 import sys
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class BoatraceDataFetcher:
     """ボートレース公式サイトからレースデータを取得"""
 
-    # 全24場のレース場コードと名前
+    # 全21場のレース場コードと名前
     VENUES = {
         "01": "桐生", "02": "平和島", "03": "住之江", "04": "尼崎",
         "05": "鳴門", "06": "多摩川", "07": "戸田", "08": "江戸川",
@@ -96,12 +96,8 @@ class BoatraceDataFetcher:
 
         logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
 
-        # 実際の開催会場を取得
-        active_venue_codes = self._fetch_active_venues(target_date)
-        logger.info(f"   対象会場: {len(active_venue_codes)}場")
-
-        # 開催会場のレースを生成
-        races = self._generate_all_venues_races(target_date, active_venue_codes)
+        # すべての21会場のレースを生成
+        races = self._generate_all_venues_races(target_date)
         logger.info(f"📊 合計 {len(races)}件のレースを取得")
 
         return races
@@ -147,7 +143,7 @@ class BoatraceDataFetcher:
         return None
 
     def _generate_all_venues_races(self, target_date: datetime, venue_codes: list = None) -> list:
-        """指定会場（省略時は全24会場）のテストレースを生成"""
+        """指定会場（省略時は全21会場）のテストレースを生成"""
         races = []
 
         venues_to_use = {
