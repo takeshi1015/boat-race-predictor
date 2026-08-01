@@ -170,30 +170,27 @@ class TestGenerateAllVenuesRaces:
 
 
 # ---------------------------------------------------------------------------
-# fetch_races_for_date – integration of _fetch_active_venues
+# fetch_races_for_date – always generates all venues
 # ---------------------------------------------------------------------------
 
 class TestFetchRacesForDate:
-    """fetch_races_for_date uses _fetch_active_venues to limit venues."""
+    """fetch_races_for_date always generates races for all 24 venues."""
 
-    def test_uses_active_venues_only(self):
+    def test_generates_all_venues(self):
         fetcher = BoatraceDataFetcher()
-        active = ["01", "13"]  # 桐生、三国 only
-
-        with patch.object(fetcher, "_fetch_active_venues", return_value=active):
-            races = fetcher.fetch_races_for_date(TARGET_DATE)
-
-        venue_names = {r["venue"] for r in races}
-        assert venue_names == {"桐生", "三国"}
-        assert len(races) == 24  # 2 venues × 12 races
-
-    def test_fallback_all_venues_on_error(self):
-        """When _fetch_active_venues falls back to all venues, all races are generated."""
-        fetcher = BoatraceDataFetcher()
-        all_codes = sorted(fetcher.VENUES.keys())
-
-        with patch.object(fetcher, "_fetch_active_venues", return_value=all_codes):
-            races = fetcher.fetch_races_for_date(TARGET_DATE)
-
+        races = fetcher.fetch_races_for_date(TARGET_DATE)
         venue_names = {r["venue"] for r in races}
         assert venue_names == set(fetcher.VENUES.values())
+
+    def test_generates_correct_race_count(self):
+        """24 venues × 12 races = 288 total races."""
+        fetcher = BoatraceDataFetcher()
+        races = fetcher.fetch_races_for_date(TARGET_DATE)
+        assert len(races) == len(fetcher.VENUES) * 12
+
+    def test_does_not_call_fetch_active_venues(self):
+        """fetch_races_for_date must not call _fetch_active_venues."""
+        fetcher = BoatraceDataFetcher()
+        with patch.object(fetcher, "_fetch_active_venues") as mock_active:
+            fetcher.fetch_races_for_date(TARGET_DATE)
+        mock_active.assert_not_called()
