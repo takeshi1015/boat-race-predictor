@@ -22,15 +22,18 @@ def _buy_label(confidence: float) -> str:
     return "購入可能" if confidence >= 0.7 else "参考情報"
 
 
-def _display_predictions(predictions: list, title: str) -> None:
+def _display_predictions(predictions: list, title: str, target_date: datetime = None) -> None:
     """予測結果をCLI形式で表示"""
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    if target_date is None:
+        target_date = datetime.now()
+    
+    date_str = target_date.strftime("%Y-%m-%d")
     print()
     print("━" * 50)
     print(f"ボートレース予測システム v1.0")
     print("━" * 50)
     print()
-    print(f"【{title}】 {today_str}")
+    print(f"【{title}】 {date_str}")
     print()
 
     if not predictions:
@@ -117,6 +120,7 @@ class TaskScheduler:
         logger.info("=" * 60)
         logger.info("当日予測タスクを開始")
         try:
+            today = datetime.now()
             predictions = self._get_model().predict_today()
             logger.info(f"当日予測完了: {len(predictions)}レース")
 
@@ -126,7 +130,7 @@ class TaskScheduler:
             else:
                 logger.info("信頼度0.7以上の予測はありません")
 
-            _display_predictions(predictions, "当日予想")
+            _display_predictions(predictions, "当日予想", today)
         except Exception as e:
             logger.error(f"当日予測エラー: {e}", exc_info=True)
             print(f"❌ 当日予測エラー: {e}")
@@ -137,6 +141,7 @@ class TaskScheduler:
         logger.info("=" * 60)
         logger.info("翌日予測タスクを開始")
         try:
+            tomorrow = datetime.now() + timedelta(days=1)
             predictions = self._get_model().predict_tomorrow()
             logger.info(f"翌日予測完了: {len(predictions)}レース")
 
@@ -146,7 +151,7 @@ class TaskScheduler:
             else:
                 logger.info("信頼度0.7以上の予測はありません")
 
-            _display_predictions(predictions, "翌日予想")
+            _display_predictions(predictions, "翌日予想", tomorrow)
         except Exception as e:
             logger.error(f"翌日予測エラー: {e}", exc_info=True)
             print(f"❌ 翌日予測エラー: {e}")
