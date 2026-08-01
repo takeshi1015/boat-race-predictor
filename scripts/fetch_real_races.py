@@ -217,11 +217,6 @@ def save_races_to_db(races: list) -> int:
 
         for race_data in races:
             try:
-                existing = db.get_race(session, race_data["race_id"])
-                if existing:
-                    logger.debug(f"スキップ（既存）: {race_data['race_id']}")
-                    continue
-
                 race = Race(**race_data)
                 session.add(race)
                 saved_count += 1
