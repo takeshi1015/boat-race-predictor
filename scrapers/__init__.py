@@ -3,5 +3,6 @@
 """
 
 from .boat_race_scraper import BoatRaceScraper
+from .official_scraper import OfficialBoatraceScraper
 
-__all__ = ['BoatRaceScraper']
+__all__ = ['BoatRaceScraper', 'OfficialBoatraceScraper']
