@@ -31,6 +31,7 @@ def main():
             "retrain",
             "stats",
             "predict",
+            "predict-live",
             "web",
             "api",
             "run-server",
@@ -41,6 +42,7 @@ def main():
             "'run' starts the continuous scheduler, "
             "'web'/'api'/'run-server' start the Flask web/API server, "
             "'predict' runs a demo prediction, "
+            "'predict-live' fetches live data and shows purchasable races, "
             "'predict-today/tomorrow' run the scheduler's daily tasks, "
             "'analyze' analyses performance, "
             "'retrain' retrains models, "
@@ -90,6 +92,8 @@ def main():
             _show_stats()
         elif args.mode == "predict":
             _run_all_models_demo(export=args.export)
+        elif args.mode == "predict-live":
+            _predict_live()
         elif args.mode in ("web", "api", "run-server"):
             _run_web_server()
         
@@ -191,22 +195,25 @@ def _show_usage() -> None:
     print()
     print("【起動方法】")
     print()
-    print("  1. 当日の予想を見る")
+    print("  1. 当日の予想を見る（購入可能なレースのみ）")
+    print("     python main.py --mode predict-live")
+    print()
+    print("  2. 当日の予想を見る（全件）")
     print("     python main.py --mode predict-today")
     print()
-    print("  2. 翌日の予想を見る")
+    print("  3. 翌日の予想を見る")
     print("     python main.py --mode predict-tomorrow")
     print()
-    print("  3. 的中率を分析する")
+    print("  4. 的中率を分析する")
     print("     python main.py --mode analyze")
     print()
-    print("  4. 学習を実行する")
+    print("  5. 学習を実行する")
     print("     python main.py --mode retrain")
     print()
-    print("  5. 統計情報を表示")
+    print("  6. 統計情報を表示")
     print("     python main.py --mode stats")
     print()
-    print("  6. Web UI を起動する（ブラウザからアクセス）")
+    print("  7. Web UI を起動する（ブラウザからアクセス）")
     print("     python main.py --mode run-server")
     print("     → http://localhost:5000/ でアクセス")
     print()
@@ -214,12 +221,20 @@ def _show_usage() -> None:
     print("  python scripts/init_test_data.py")
     print()
     print("【説明】")
-    print("  - 信頼度 0.7 以上が購入可能な予想です")
+    print("  - 信頼度 0.7 以上が購入推奨の予想です")
+    print("  - predict-live は発走10分以上前のレースのみ表示します")
     print("  - 毎日自動的に前日の結果から学習します")
     print("  - 的中率は徐々に向上します")
     print()
     print("━" * 50)
     print()
+
+
+def _predict_live() -> None:
+    """ライブ予測を実行（購入可能なレースのみ表示）"""
+    logger.info("ライブ予測実行開始")
+    from scripts.fetch_and_predict import run_fetch_and_predict
+    run_fetch_and_predict()
 
 
 def _show_stats() -> None:

@@ -29,7 +29,7 @@ _WATER_REASONS = {
 }
 
 # ボートレースの購入締め切り時間（レース開始の何分前まで購入可能か）
-RACE_TICKET_CUTOFF_MINUTES = 5
+RACE_TICKET_CUTOFF_MINUTES = 10
 
 
 def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -> float:
@@ -122,11 +122,22 @@ class EnsembleModel:
                     logger.debug(f"❌ {venue_name} {race_num}R - レース場が非開催のため除外")
                     continue
                 
-                time_str = race_datetime.strftime('%H:%M') if race_datetime else '?'
+                # 当日予測の場合: 購入可能なレースのみを対象とする
+                if period == "today" and isinstance(race_datetime, datetime):
+                    from models.xgboost_predictor import is_race_purchasable
+                    if not is_race_purchasable(race_datetime, now):
+                        time_str = race_datetime.strftime('%H:%M')
+                        logger.debug(
+                            f"❌ {venue_name} {race_num}R {time_str}"
+                            " - 購入締切済み（発走済みまたは10分未満）のため除外"
+                        )
+                        continue
+                
+                time_str = race_datetime.strftime('%H:%M') if isinstance(race_datetime, datetime) else '?'
                 logger.debug(f"✅ {venue_name} {race_num}R {time_str} - 予測対象")
                 
                 pred = self._predict_race(race, period)
-                if pred:
+                if pred and pred.get("is_purchasable", True):
                     predictions.append(pred)
             
             logger.info(f"{period}予測完了: {len(predictions)}件")
@@ -180,6 +191,9 @@ class EnsembleModel:
                 now = datetime.now()
                 is_purchasable = now <= deadline_dt
                 time_remaining = max(0, int((deadline_dt - now).total_seconds()))
+                time_until_start = max(0.0, (date_val - now).total_seconds() / 60)
+            else:
+                time_until_start = 0.0
 
             return {
                 "race_id": getattr(race, "race_id", "unknown"),
@@ -196,6 +210,8 @@ class EnsembleModel:
                 "purchase_deadline_iso": purchase_deadline_iso,
                 "is_purchasable": is_purchasable,
                 "time_remaining": time_remaining,
+                "time_until_start_minutes": round(time_until_start, 1),
+                "is_recommended": round(confidence, 2) >= 0.70,
             }
         except Exception as e:
             logger.error(f"レース予測エラー: {e}")

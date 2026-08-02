@@ -332,17 +332,48 @@ def health_check() -> Response:
 # ---------------------------------------------------------------------------
 @api_bp.route("/races/today", methods=["GET"])
 def get_today_races() -> Response:
-    """Return today's race predictions from the database.
+    """Return today's purchasable race predictions.
+
+    Only races that are currently open for purchase are returned:
+    - Race start time is at least 10 minutes in the future
+    - Race has not been confirmed (着順確定していない)
+
+    Optionally filter further with query params:
+        ?recommended_only=true  – only return confidence >= 70 %
+        ?min_confidence=0.5     – custom confidence threshold
 
     Returns:
-        JSON array of race predictions.
+        JSON object with date, count, and predictions array.
+        Each prediction includes is_purchasable, time_until_start_minutes,
+        is_recommended, and confidence fields.
     """
     try:
         from models.ensemble_model import EnsembleModel
+
         model = EnsembleModel()
+        # predict_today() now returns only purchasable races (filtering in model)
         predictions = model.predict_today()
+
+        now = datetime.now()
+
+        # Optional post-filters from query string
+        recommended_only = request.args.get("recommended_only", "").lower() in ("1", "true", "yes")
+        try:
+            min_confidence = float(request.args.get("min_confidence", 0.0))
+        except ValueError:
+            min_confidence = 0.0
+
+        if recommended_only:
+            predictions = [p for p in predictions if p.get("confidence", 0) >= 0.70]
+        elif min_confidence > 0.0:
+            predictions = [p for p in predictions if p.get("confidence", 0) >= min_confidence]
+
+        # Sort by time_until_start_minutes (soonest first so users can act quickly)
+        predictions.sort(key=lambda p: p.get("time_until_start_minutes", float("inf")))
+
         return jsonify({
-            "date": datetime.now().strftime("%Y-%m-%d"),
+            "date": now.strftime("%Y-%m-%d"),
+            "current_time": now.strftime("%H:%M"),
             "count": len(predictions),
             "predictions": predictions,
         })
