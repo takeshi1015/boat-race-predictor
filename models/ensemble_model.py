@@ -29,7 +29,7 @@ _WATER_REASONS = {
 }
 
 # ボートレースの購入締め切り時間（レース開始の何分前まで購入可能か）
-RACE_TICKET_CUTOFF_MINUTES = 3
+RACE_TICKET_CUTOFF_MINUTES = 5
 
 
 def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -> float:
@@ -122,12 +122,6 @@ class EnsembleModel:
                     logger.debug(f"❌ {venue_name} {race_num}R - レース場が非開催のため除外")
                     continue
                 
-                # 当日のみ購入可能性を確認（翌日は時刻チェック不要）
-                if period == "today":
-                    if race_datetime and not _is_race_purchasable(race_datetime):
-                        logger.debug(f"❌ {venue_name} {race_num}R {race_datetime.strftime('%H:%M')} - 購入締め切り終了のため除外")
-                        continue
-                
                 time_str = race_datetime.strftime('%H:%M') if race_datetime else '?'
                 logger.debug(f"✅ {venue_name} {race_num}R {time_str} - 予測対象")
                 
@@ -170,6 +164,22 @@ class EnsembleModel:
             date_val = getattr(race, "date", datetime.now())
             date_str = date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val)
 
+            # レース時刻と購入制限時刻の計算
+            if hasattr(date_val, "strftime"):
+                race_time = date_val.strftime('%H:%M')
+                deadline_dt = date_val - timedelta(minutes=RACE_TICKET_CUTOFF_MINUTES)
+                purchase_deadline = deadline_dt.strftime('%H:%M')
+                purchase_deadline_iso = deadline_dt.isoformat()
+                now = datetime.now()
+                time_remaining = max(0, (deadline_dt - now).total_seconds())
+                is_purchasable = deadline_dt > now
+            else:
+                race_time = None
+                purchase_deadline = None
+                purchase_deadline_iso = None
+                time_remaining = 0
+                is_purchasable = False
+
             return {
                 "race_id": getattr(race, "race_id", "unknown"),
                 "date": date_str,
@@ -180,6 +190,11 @@ class EnsembleModel:
                 "confidence": round(confidence, 2),
                 "reason": reason,
                 "timestamp": datetime.now().isoformat(),
+                "race_time": race_time,
+                "purchase_deadline": purchase_deadline,
+                "purchase_deadline_iso": purchase_deadline_iso,
+                "time_remaining": int(time_remaining),
+                "is_purchasable": is_purchasable,
             }
         except Exception as e:
             logger.error(f"レース予測エラー: {e}")

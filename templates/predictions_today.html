@@ -55,6 +55,38 @@ function labelText(confidence) {
   return confidence >= CONFIDENCE_THRESHOLD ? "購入可能" : "参考情報";
 }
 
+function raceItemClass(pred) {
+  if (!pred.purchase_deadline_iso) return "tomorrow";
+  const deadline = new Date(pred.purchase_deadline_iso);
+  const now = new Date();
+  const remaining = (deadline - now) / 1000;
+  if (remaining <= 0) return "expired";
+  if (remaining <= 300) return "urgent";
+  return "available";
+}
+
+function purchaseStatusHtml(pred) {
+  if (!pred.purchase_deadline_iso) {
+    return `<span class="badge bg-primary"><span style="margin-right:4px">ℹ️</span>明日</span>`;
+  }
+  const deadline = new Date(pred.purchase_deadline_iso);
+  const now = new Date();
+  const remaining = Math.max(0, (deadline - now) / 1000);
+  if (remaining <= 0) {
+    return `<span class="badge bg-secondary"><span style="margin-right:4px">❌</span>購入終了</span>`;
+  }
+  if (remaining <= 300) {
+    return `<span class="badge bg-warning text-dark"><span style="margin-right:4px">⚠️</span>急いで！</span>`;
+  }
+  return `<span class="badge bg-success"><span style="margin-right:4px">✅</span>購入可能</span>`;
+}
+
+function formatRemaining(seconds) {
+  const min = Math.floor(seconds / 60);
+  const sec = Math.floor(seconds % 60);
+  return `${min}分${sec}秒`;
+}
+
 async function loadPredictions() {
   const container = document.getElementById("prediction-cards");
   container.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
@@ -67,7 +99,7 @@ async function loadPredictions() {
     document.getElementById("last-updated").textContent = new Date().toLocaleString("ja-JP");
 
     const predictions = data.predictions || [];
-    const buyable = predictions.filter(p => p.confidence >= CONFIDENCE_THRESHOLD);
+    const buyable = predictions.filter(p => p.is_purchasable && p.confidence >= CONFIDENCE_THRESHOLD);
 
     const banner = document.getElementById("buyable-banner");
     document.getElementById("buyable-count").textContent = buyable.length + "件";
@@ -90,15 +122,25 @@ async function loadPredictions() {
       const order = (pred.predicted_order || []).join("-") || "-";
       const conf = pred.confidence || 0;
       const confPct = (conf * 100).toFixed(1);
-      const card = document.createElement("div");
-      card.className = "col-md-6 col-lg-4";
-      card.innerHTML = `
-        <div class="card shadow-sm h-100 ${conf >= CONFIDENCE_THRESHOLD ? 'border-success' : ''}">
+      const stateClass = raceItemClass(pred);
+      const deadlineIso = pred.purchase_deadline_iso || "";
+      const initialRemaining = pred.time_remaining || 0;
+      const initialRemainingText = deadlineIso ? formatRemaining(initialRemaining) : "-";
+
+      const col = document.createElement("div");
+      col.className = "col-md-6 col-lg-4";
+      col.innerHTML = `
+        <div class="card shadow-sm h-100 race-item ${stateClass}" data-deadline="${deadlineIso}">
           <div class="card-header d-flex justify-content-between align-items-center">
             <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
-            <span class="badge bg-secondary">${pred.race_number}レース</span>
+            <span class="badge bg-secondary">${pred.race_number}R</span>
           </div>
           <div class="card-body">
+            <div class="race-time mb-2">
+              ${pred.race_time ? `<span>⏰ レース時刻: <strong>${pred.race_time}</strong></span>` : ""}
+              ${pred.purchase_deadline ? `<span>🚫 購入制限: <strong>${pred.purchase_deadline}</strong>（残り <span class="time-remaining">${initialRemainingText}</span>）</span>` : ""}
+            </div>
+            <div class="mb-2">${purchaseStatusHtml(pred)}</div>
             <div class="text-center mb-3">
               <span class="display-6 fw-bold text-primary">${order}</span>
               <p class="text-muted small mb-0">推奨買い目</p>
@@ -118,7 +160,7 @@ async function loadPredictions() {
             ${pred.reason ? `<p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>${pred.reason}</p>` : ""}
           </div>
         </div>`;
-      container.appendChild(card);
+      container.appendChild(col);
     });
   } catch (e) {
     container.innerHTML = `<div class="col-12"><div class="alert alert-danger">データの読み込みに失敗しました: ${e.message}</div></div>`;
