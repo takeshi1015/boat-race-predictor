@@ -48,6 +48,24 @@ def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -
     return min(max(base + random.uniform(-0.05, 0.05), 0.30), 0.95)
 
 
+def _estimate_odds(confidence: float, race_number: int) -> float:
+    """信頼度からオッズを推定する
+
+    信頼度が低いほど高オッズ（穴狙い向き）になる傾向を模擬する。
+    """
+    if confidence >= 0.80:
+        base = random.uniform(5.0, 18.0)
+    elif confidence >= 0.70:
+        base = random.uniform(10.0, 35.0)
+    elif confidence >= 0.50:
+        base = random.uniform(18.0, 80.0)
+    else:
+        base = random.uniform(25.0, 120.0)
+    # レース番号による微変動
+    seed_factor = 1.0 + (race_number % 5) * 0.04
+    return round(base * seed_factor, 1)
+
+
 def _make_prediction_order(race_number: int, weather: str) -> list:
     """シンプルなヒューリスティック予測：1号艇優先 + 変動"""
     base = [1, 2, 3, 4, 5, 6]
@@ -93,6 +111,55 @@ class EnsembleModel:
         """翌日の予測を実行"""
         logger.info("翌日予測を開始")
         return self._predict_for_period("tomorrow")
+
+    def predict_categorized(self, period: str = "today") -> dict:
+        """カテゴリー別（高信頼度 / 穴狙い）の予測を返す
+
+        Args:
+            period: "today" または "tomorrow"
+
+        Returns:
+            {
+                "high_confidence": [...],  # 信頼度 >= 0.80 TOP 5
+                "high_odds": [...],        # 信頼度 0.50-0.70 かつ 推定オッズ >= 30 TOP 5
+            }
+        """
+        all_predictions = self._predict_for_period(period)
+
+        # --- 高信頼度: 信頼度 >= 0.80 ---
+        high_confidence = sorted(
+            [p for p in all_predictions if p.get("confidence", 0) >= 0.80],
+            key=lambda x: x["confidence"],
+            reverse=True,
+        )[:5]
+        for p in high_confidence:
+            base_reason = p.get("reason") or "統計分析で信頼度高い"
+            p["category"] = "high_confidence"
+            p["recommendation"] = "◎本命"
+            p["badge"] = "【購入推奨】"
+            p["reason"] = "◎ 本命の可能性が高い - " + base_reason
+
+        # --- 穴狙い: 信頼度 0.50-0.70 かつ 推定オッズ >= 30 ---
+        high_odds = sorted(
+            [
+                p for p in all_predictions
+                if 0.50 <= p.get("confidence", 0) <= 0.70
+                and p.get("estimated_odds", 0) >= 30
+            ],
+            key=lambda x: x.get("estimated_odds", 0),
+            reverse=True,
+        )[:5]
+        for p in high_odds:
+            base_reason = p.get("reason") or "本命が来ない場合のリスク承知、高配当期待"
+            p["category"] = "high_odds"
+            p["recommendation"] = "△配当狙い"
+            p["badge"] = "【穴狙い】"
+            p["reason"] = "△ 配当狙い - " + base_reason
+
+        return {
+            "high_confidence": high_confidence,
+            "high_odds": high_odds,
+        }
 
     def _predict_for_period(self, period: str) -> list:
         """指定期間のレースを予測"""
@@ -161,6 +228,7 @@ class EnsembleModel:
 
             predicted_order = _make_prediction_order(race_number, weather)
             confidence = _confidence_from_conditions(weather, water_cond, hour)
+            odds = _estimate_odds(confidence, race_number)
 
             reason = _WEATHER_REASONS.get(weather, "")
             water_reason = _WATER_REASONS.get(water_cond, "")
@@ -178,7 +246,11 @@ class EnsembleModel:
                 "race_number": race_number,
                 "predicted_order": predicted_order,
                 "confidence": round(confidence, 2),
+                "estimated_odds": odds,
                 "reason": reason,
+                "category": "normal",
+                "recommendation": "〇参考",
+                "badge": "",
                 "timestamp": datetime.now().isoformat(),
             }
         except Exception as e:

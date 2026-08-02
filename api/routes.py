@@ -332,19 +332,22 @@ def health_check() -> Response:
 # ---------------------------------------------------------------------------
 @api_bp.route("/races/today", methods=["GET"])
 def get_today_races() -> Response:
-    """Return today's race predictions from the database.
+    """Return today's race predictions from the database, categorised.
 
     Returns:
-        JSON array of race predictions.
+        JSON object with ``high_confidence`` and ``high_odds`` prediction lists.
     """
     try:
         from models.ensemble_model import EnsembleModel
         model = EnsembleModel()
-        predictions = model.predict_today()
+        categorized = model.predict_categorized("today")
         return jsonify({
             "date": datetime.now().strftime("%Y-%m-%d"),
-            "count": len(predictions),
-            "predictions": predictions,
+            "high_confidence": categorized["high_confidence"],
+            "high_odds": categorized["high_odds"],
+            # backward-compatible flat list
+            "predictions": categorized["high_confidence"] + categorized["high_odds"],
+            "count": len(categorized["high_confidence"]) + len(categorized["high_odds"]),
         })
     except Exception as exc:
         logger.error("Today race predictions failed: %s", exc, exc_info=True)
@@ -356,21 +359,24 @@ def get_today_races() -> Response:
 # ---------------------------------------------------------------------------
 @api_bp.route("/races/tomorrow", methods=["GET"])
 def get_tomorrow_races() -> Response:
-    """Return tomorrow's race predictions from the database.
+    """Return tomorrow's race predictions from the database, categorised.
 
     Returns:
-        JSON array of race predictions.
+        JSON object with ``high_confidence`` and ``high_odds`` prediction lists.
     """
     try:
         from datetime import timedelta
         from models.ensemble_model import EnsembleModel
         model = EnsembleModel()
-        predictions = model.predict_tomorrow()
+        categorized = model.predict_categorized("tomorrow")
         tomorrow = datetime.now() + timedelta(days=1)
         return jsonify({
             "date": tomorrow.strftime("%Y-%m-%d"),
-            "count": len(predictions),
-            "predictions": predictions,
+            "high_confidence": categorized["high_confidence"],
+            "high_odds": categorized["high_odds"],
+            # backward-compatible flat list
+            "predictions": categorized["high_confidence"] + categorized["high_odds"],
+            "count": len(categorized["high_confidence"]) + len(categorized["high_odds"]),
         })
     except Exception as exc:
         logger.error("Tomorrow race predictions failed: %s", exc, exc_info=True)
