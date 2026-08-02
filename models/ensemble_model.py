@@ -28,8 +28,13 @@ _WATER_REASONS = {
     "rough": "荒れた水面で波乱含みの展開",
 }
 
-# ボートレースの購入締め切り時間（レース開始の何分前まで購入可能か）
-RACE_TICKET_CUTOFF_MINUTES = 5
+# ボートレース営業時間
+RACE_BUSINESS_START = 6  # 朝6時
+RACE_BUSINESS_END_HOUR = 22  # 夜22時
+RACE_BUSINESS_END_MINUTE = 50  # 50分
+
+# 購入可能判定の基準
+RACE_TICKET_CUTOFF_MINUTES = 10  # 発走10分前まで購入可能
 
 
 def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -> float:
@@ -59,17 +64,47 @@ def _make_prediction_order(race_number: int, weather: str) -> list:
 
 
 def _is_race_purchasable(race_datetime: datetime) -> bool:
-    """レースが現在購入可能か判定
-    
+    """
+    レースが購入可能かを判定
+
+    条件：
+    1. 発走時刻が営業時間内（6:00 ～ 22:50）か
+    2. 現在時刻から発走まで10分以上あるか
+    3. 既に発走時刻を過ぎていないか
+
     Args:
-        race_datetime: レース開始日時
-        
+        race_datetime: レース発走予定日時
+
     Returns:
         True: 購入可能, False: 購入不可
     """
     now = datetime.now()
+
+    # ===== 営業時間チェック =====
+    # 22:50以降のレースは営業外 → 購入不可
+    if race_datetime.hour > RACE_BUSINESS_END_HOUR or \
+       (race_datetime.hour == RACE_BUSINESS_END_HOUR and race_datetime.minute > RACE_BUSINESS_END_MINUTE):
+        logger.debug(f"営業外: {race_datetime.strftime('%H:%M')} > {RACE_BUSINESS_END_HOUR}:{RACE_BUSINESS_END_MINUTE:02d}")
+        return False
+
+    # 6:00未満のレースも営業外 → 購入不可
+    if race_datetime.hour < RACE_BUSINESS_START:
+        logger.debug(f"営業前: {race_datetime.strftime('%H:%M')} < {RACE_BUSINESS_START}:00")
+        return False
+
+    # ===== 発走時刻チェック =====
+    # 購入締切時刻 = 発走予定時刻 - 10分
     cutoff_time = race_datetime - timedelta(minutes=RACE_TICKET_CUTOFF_MINUTES)
-    return now <= cutoff_time
+
+    # 既に購入締切を過ぎている → 購入不可
+    if now > cutoff_time:
+        time_diff = (now - race_datetime).total_seconds() / 60
+        logger.debug(f"購入締切済み: 発走まで{time_diff:.1f}分")
+        return False
+
+    # 発走時刻未来 かつ 営業時間内 → 購入可能
+    logger.debug(f"購入可能: {race_datetime.strftime('%H:%M')}発走（あと{(cutoff_time - now).total_seconds() / 60:.1f}分まで購入可能）")
+    return True
 
 
 class EnsembleModel:
@@ -123,7 +158,20 @@ class EnsembleModel:
                     continue
                 
                 time_str = race_datetime.strftime('%H:%M') if race_datetime else '?'
-                logger.debug(f"✅ {venue_name} {race_num}R {time_str} - 予測対象")
+                
+                is_in_business_hours = isinstance(race_datetime, datetime) and \
+                    race_datetime.hour >= RACE_BUSINESS_START and \
+                    not (race_datetime.hour > RACE_BUSINESS_END_HOUR or
+                         (race_datetime.hour == RACE_BUSINESS_END_HOUR and race_datetime.minute > RACE_BUSINESS_END_MINUTE))
+                
+                if not is_in_business_hours:
+                    logger.warning(f"❌ {venue_name} R{race_num} {time_str} - 営業外のため除外")
+                    logger.debug(f"   営業時間: {RACE_BUSINESS_START}:00 ～ {RACE_BUSINESS_END_HOUR}:{RACE_BUSINESS_END_MINUTE:02d}")
+                    logger.debug(f"   発走時刻: {time_str}")
+                    continue
+                
+                logger.info(f"✅ {venue_name} R{race_num} {time_str} - 購入可能")
+                logger.debug(f"   営業時間: OK ({time_str})")
                 
                 pred = self._predict_race(race, period)
                 if pred:
@@ -176,10 +224,15 @@ class EnsembleModel:
                 deadline_dt = date_val - timedelta(minutes=RACE_TICKET_CUTOFF_MINUTES)
                 purchase_deadline_str = deadline_dt.strftime('%H:%M')
                 purchase_deadline_iso = deadline_dt.isoformat()
-                
+
+                is_purchasable = _is_race_purchasable(date_val)
                 now = datetime.now()
-                is_purchasable = now <= deadline_dt
                 time_remaining = max(0, int((deadline_dt - now).total_seconds()))
+
+            business_hours_ok = isinstance(date_val, datetime) and \
+                date_val.hour >= RACE_BUSINESS_START and \
+                not (date_val.hour > RACE_BUSINESS_END_HOUR or
+                     (date_val.hour == RACE_BUSINESS_END_HOUR and date_val.minute > RACE_BUSINESS_END_MINUTE))
 
             return {
                 "race_id": getattr(race, "race_id", "unknown"),
@@ -196,6 +249,8 @@ class EnsembleModel:
                 "purchase_deadline_iso": purchase_deadline_iso,
                 "is_purchasable": is_purchasable,
                 "time_remaining": time_remaining,
+                "business_hours_ok": business_hours_ok,
+                "business_hours_info": f"{RACE_BUSINESS_START}:00 ～ {RACE_BUSINESS_END_HOUR}:{RACE_BUSINESS_END_MINUTE:02d}",
             }
         except Exception as e:
             logger.error(f"レース予測エラー: {e}")
