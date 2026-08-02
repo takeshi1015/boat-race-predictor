@@ -15,7 +15,7 @@
   </div>
 </div>
 
-<!-- 高信頼度予想（80%以上）-->
+<!-- 高信頼度予想（70%以上）-->
 <div class="mb-5">
   <h3 class="fw-bold text-success mb-3">
     <i class="bi bi-check-circle-fill me-2"></i>✅ 確実性の高い予想 - 本命狙い
@@ -61,7 +61,7 @@ function createRaceCard(pred, category) {
   const order = (pred.predicted_order || []).join("-") || "-";
   const conf = pred.confidence || 0;
   const confPct = (conf * 100).toFixed(1);
-  const isHighConfidence = category === "high_confidence";
+  const isHighConfidence = category === "high_confidence" || pred.is_recommended;
   
   const raceTime = pred.race_time || "?";
   const deadline = pred.purchase_deadline || "?";
@@ -80,7 +80,7 @@ function createRaceCard(pred, category) {
   const statusText = isPurchasable ? "購入可能" : "購入終了";
   
   card.innerHTML = `
-    <div class="card shadow-sm h-100 race-item ${isPurchasable ? 'available' : 'expired'}" 
+    <div class="card shadow-sm h-100 race-item ${isPurchasable ? 'available' : 'expired'} ${isHighConfidence ? 'border border-success border-2' : ''}" 
          data-deadline="${deadlineIso}">
       <div class="card-header d-flex justify-content-between align-items-center" style="background-color: ${headerBg}">
         <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
@@ -150,16 +150,16 @@ async function loadPredictions() {
     document.getElementById("today-date").textContent = data.date || "";
     document.getElementById("last-updated").textContent = new Date().toLocaleString("ja-JP");
 
-    const predictions = data.predictions || [];
+    const predictions = (data.predictions || []).sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
     
-    // 高信頼度（80%以上）
-    const highConf = predictions.filter(p => p.confidence >= 0.80);
+    // 高信頼度（70%以上）
+    const highConf = predictions.filter(p => p.confidence >= 0.70);
     
     // 穴狙い（50-70%、高信頼度と重複なし）
     const usedVenues = new Set(highConf.map(p => p.place || p.venue));
     const highOdds = predictions.filter(p => 
       p.confidence >= 0.50 && 
-      p.confidence < 0.80 &&
+      p.confidence < 0.70 &&
       !(usedVenues.has(p.place || p.venue))
     );
 

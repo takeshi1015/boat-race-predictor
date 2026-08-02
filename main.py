@@ -27,6 +27,7 @@ def main():
             "run",
             "predict-today",
             "predict-tomorrow",
+            "predict-live",
             "analyze",
             "retrain",
             "stats",
@@ -42,6 +43,7 @@ def main():
             "'web'/'api'/'run-server' start the Flask web/API server, "
             "'predict' runs a demo prediction, "
             "'predict-today/tomorrow' run the scheduler's daily tasks, "
+            "'predict-live' fetches official races and predicts with XGBoost, "
             "'analyze' analyses performance, "
             "'retrain' retrains models, "
             "'stats' shows statistics"
@@ -82,6 +84,8 @@ def main():
             _predict_today()
         elif args.mode == "predict-tomorrow":
             _predict_tomorrow()
+        elif args.mode == "predict-live":
+            _predict_live()
         elif args.mode == "analyze":
             _analyze_performance()
         elif args.mode == "retrain":
@@ -200,13 +204,16 @@ def _show_usage() -> None:
     print("  3. 的中率を分析する")
     print("     python main.py --mode analyze")
     print()
-    print("  4. 学習を実行する")
+    print("  4. 公式データで当日ライブ予測")
+    print("     python main.py --mode predict-live")
+    print()
+    print("  5. 学習を実行する")
     print("     python main.py --mode retrain")
     print()
-    print("  5. 統計情報を表示")
+    print("  6. 統計情報を表示")
     print("     python main.py --mode stats")
     print()
-    print("  6. Web UI を起動する（ブラウザからアクセス）")
+    print("  7. Web UI を起動する（ブラウザからアクセス）")
     print("     python main.py --mode run-server")
     print("     → http://localhost:5000/ でアクセス")
     print()
@@ -275,6 +282,29 @@ def _predict_tomorrow():
     _get_scheduler()._run_tomorrow_prediction()
     
     logger.info("Tomorrow's prediction task completed")
+
+
+def _predict_live() -> None:
+    """Fetch official data and run live XGBoost predictions."""
+    logger.info("Running live prediction task")
+    from scripts.fetch_and_predict import run_fetch_and_predict
+
+    predictions = run_fetch_and_predict()
+    logger.info("Live prediction completed: %d races", len(predictions))
+
+    for pred in predictions[:10]:
+        order = "-".join(str(x) for x in pred.get("predicted_order", []))
+        confidence = float(pred.get("confidence", 0.0))
+        marker = "★推奨" if confidence >= 0.7 else ""
+        logger.info(
+            "%s %s %sR %s confidence=%.2f %s",
+            pred.get("race_id"),
+            pred.get("venue", ""),
+            pred.get("race_number", ""),
+            order,
+            confidence,
+            marker,
+        )
 
 
 def _analyze_performance():
@@ -414,4 +444,3 @@ def _run_all_models_demo(export: Optional[Literal["json", "csv", "all"]] = None)
 
 if __name__ == "__main__":
     main()
-
