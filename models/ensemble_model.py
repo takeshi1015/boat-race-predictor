@@ -170,6 +170,19 @@ class EnsembleModel:
             date_val = getattr(race, "date", datetime.now())
             date_str = date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val)
 
+            # 購入締め切り時刻と購入可能フラグを算出
+            race_time_iso = date_str
+            if isinstance(date_val, datetime):
+                deadline_dt = date_val - timedelta(minutes=RACE_TICKET_CUTOFF_MINUTES)
+                purchase_deadline_iso = deadline_dt.isoformat()
+                now = datetime.now()
+                is_purchasable = now <= deadline_dt
+                remaining_seconds = max(0, int((deadline_dt - now).total_seconds()))
+            else:
+                purchase_deadline_iso = None
+                is_purchasable = False
+                remaining_seconds = 0
+
             return {
                 "race_id": getattr(race, "race_id", "unknown"),
                 "date": date_str,
@@ -180,6 +193,10 @@ class EnsembleModel:
                 "confidence": round(confidence, 2),
                 "reason": reason,
                 "timestamp": datetime.now().isoformat(),
+                "race_time": race_time_iso,
+                "purchase_deadline": purchase_deadline_iso,
+                "is_purchasable": is_purchasable,
+                "time_remaining": remaining_seconds,
             }
         except Exception as e:
             logger.error(f"レース予測エラー: {e}")
