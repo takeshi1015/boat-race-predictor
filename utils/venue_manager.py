@@ -44,14 +44,14 @@ class VenueManager:
         "若松": {"code": "22", "name_jp": "若松"},
     }
 
-    # テストデータ用：固定の開催日程
+    # テストデータ用：固定の開催日程（最終フォールバック用）
     FIXED_SCHEDULE = {
         "2026-08-02": ["桐生", "多摩川", "浜名湖", "常滑", "びわこ", "尼崎", "丸亀", "児島", "若松", "芦屋", "福岡", "唐津"],
     }
 
     def __init__(self):
         self.cache_file = "venue_schedule.json"
-        self.cache_expiry_hours = 3  # 3時間でキャッシュ無効
+        self.cache_expiry_hours = 1  # 1時間でキャッシュ無効（リアルタイム性を重視）
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -61,45 +61,44 @@ class VenueManager:
         """
         本日開催中のレース場を取得
         優先順位：
-        1. 固定スケジュール（テスト用）
-        2. 公式サイトからスクレイピング（リアルタイム）
-        3. キャッシュから取得
-        4. DBのレースデータから抽出（ただしフィルタリング）
+        1. 公式サイトからスクレイピング（リアルタイム）← 最優先
+        2. キャッシュから取得（スクレイピング失敗時）
+        3. DBのレースデータから抽出（ただしフィルタリング）
+        4. 固定スケジュール（テスト用・最終フォールバック）
         """
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        
-        # 1. 固定スケジュールをチェック
-        if today_str in self.FIXED_SCHEDULE:
-            operating = self.FIXED_SCHEDULE[today_str]
-            logger.info(f"固定スケジュールから開催場所取得: {operating}")
-            return operating
-
-        # 2. 公式サイトからスクレイピング（最優先）
+        # 1. 公式サイトからスクレイピング（最優先）
         try:
             operating = self._fetch_from_official_site()
             if operating:
                 self._save_cache(operating)
-                logger.info(f"公式サイトから開催場所取得: {operating}")
+                logger.info(f"✅ 公式サイトから開催場所取得: {operating}")
                 return operating
         except Exception as e:
             logger.debug(f"公式サイトスクレイピング失敗: {e}")
 
-        # 3. キャッシュから取得
+        # 2. キャッシュから取得
         cached_venues = self._load_cache()
         if cached_venues is not None:
-            logger.info(f"キャッシュから開催場所取得: {cached_venues}")
+            logger.info(f"✅ キャッシュから開催場所取得: {cached_venues}")
             return cached_venues
 
-        # 4. フォールバック: DBのレースデータから開催場所を抽出
+        # 3. DBのレースデータから開催場所を抽出
         try:
             operating = self._get_venues_from_database()
             if operating:
-                logger.info(f"DBから開催場所取得: {operating}")
+                logger.info(f"✅ DBから開催場所取得: {operating}")
                 return operating
         except Exception as e:
             logger.debug(f"DB抽出失敗: {e}")
 
-        logger.warning("開催場所情報を取得できません")
+        # 4. 固定スケジュール（テスト用・最終フォールバック）
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        if today_str in self.FIXED_SCHEDULE:
+            operating = self.FIXED_SCHEDULE[today_str]
+            logger.warning(f"⚠️ 固定スケジュール（テスト用）から開催場所取得: {operating}")
+            return operating
+
+        logger.warning("❌ 開催場所情報を取得できません")
         return []
 
     def get_operating_venues_tomorrow(self):
@@ -107,30 +106,31 @@ class VenueManager:
         from datetime import datetime, timedelta
         
         tomorrow = datetime.now() + timedelta(days=1)
-        tomorrow_str = tomorrow.strftime("%Y-%m-%d")
         
-        # 1. 固定スケジュールをチェック
-        if tomorrow_str in self.FIXED_SCHEDULE:
-            operating = self.FIXED_SCHEDULE[tomorrow_str]
-            logger.info(f"固定スケジュールから翌日開催場所取得: {operating}")
-            return operating
-
+        # 1. 公式サイトからスクレイピング（最優先）
         try:
             operating = self._fetch_from_official_site(target_date=tomorrow)
             if operating:
-                logger.info(f"翌日開催場所取得: {operating}")
+                logger.info(f"✅ 翌日公式サイト開催場所取得: {operating}")
                 return operating
         except Exception as e:
             logger.debug(f"翌日スクレイピング失敗: {e}")
 
-        # フォールバック: DBから取得
+        # 2. DBから取得
         try:
             operating = self._get_venues_from_database(target_date=tomorrow)
             if operating:
-                logger.info(f"翌日DB開催場所取得: {operating}")
+                logger.info(f"✅ 翌日DB開催場所取得: {operating}")
                 return operating
         except Exception as e:
             logger.debug(f"翌日DB抽出失敗: {e}")
+
+        # 3. 固定スケジュール（テスト用）
+        tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+        if tomorrow_str in self.FIXED_SCHEDULE:
+            operating = self.FIXED_SCHEDULE[tomorrow_str]
+            logger.warning(f"⚠️ 翌日固定スケジュール（テスト用）: {operating}")
+            return operating
 
         return []
 
@@ -144,6 +144,7 @@ class VenueManager:
             url = f"{self.BASE_URL}/race/schedule"
             params = {"date": date_str}
 
+            logger.debug(f"公式サイトアクセス: {url}?date={date_str}")
             response = self.session.get(url, params=params, timeout=10)
             response.encoding = "utf-8"
 
@@ -164,6 +165,7 @@ class VenueManager:
                     venue_name = self._extract_venue_name(item.get_text(strip=True))
                     if venue_name and venue_name not in operating_venues:
                         operating_venues.append(venue_name)
+                        logger.debug(f"抽出 (method1): {venue_name}")
 
             # 方法2: テーブルから抽出
             if not operating_venues:
@@ -176,6 +178,7 @@ class VenueManager:
                             venue_name = self._extract_venue_name(cell.get_text(strip=True))
                             if venue_name and venue_name not in operating_venues:
                                 operating_venues.append(venue_name)
+                                logger.debug(f"抽出 (method2): {venue_name}")
 
             # 方法3: リンクから抽出
             if not operating_venues:
@@ -189,12 +192,17 @@ class VenueManager:
                             if info["code"] == jyo_code:
                                 if venue_name not in operating_venues:
                                     operating_venues.append(venue_name)
+                                    logger.debug(f"抽出 (method3): {venue_name}")
                                 break
 
-            return sorted(operating_venues) if operating_venues else None
+            if operating_venues:
+                return sorted(operating_venues)
+            else:
+                logger.debug("公式サイトからレース場を抽出できませんでした")
+                return None
 
         except Exception as e:
-            logger.debug(f"スクレイピング処理エラー: {e}")
+            logger.error(f"スクレイピング処理エラー: {e}")
             return None
 
     def _extract_venue_name(self, text: str):
@@ -205,12 +213,7 @@ class VenueManager:
         return None
 
     def _get_venues_from_database(self, target_date=None):
-        """データベースのレースデータから開催場所を抽出
-        
-        ※注意: DBから取得したレース場をそのまま使用すると、
-        テスト用のダミーレースが含まれる可能性があるため、
-        必ず公式スケジュールとの照合が必要。
-        """
+        """データベースのレースデータから開催場所を抽出"""
         try:
             from database.db_manager import get_db_manager
             from datetime import datetime
@@ -224,16 +227,7 @@ class VenueManager:
                 races = db.get_races_by_date(session, target_date)
                 venues = list(set([r.place or r.venue for r in races if (r.place or r.venue)]))
                 
-                # 公式スケジュールに基づいてフィルタリング
-                date_str = target_date.strftime("%Y-%m-%d")
-                official_venues = self.FIXED_SCHEDULE.get(date_str)
-                
-                if official_venues:
-                    # 公式スケジュールに含まれるもののみを返す
-                    filtered_venues = [v for v in venues if v in official_venues]
-                    logger.info(f"DBから抽出: {venues} → フィルタ後: {filtered_venues}")
-                    return sorted(filtered_venues) if filtered_venues else None
-                
+                logger.debug(f"DBから抽出したレース場: {venues}")
                 return sorted(venues) if venues else None
             finally:
                 session.close()
@@ -259,8 +253,11 @@ class VenueManager:
                 cached_date.date() == now.date()
                 and (now - cached_date).total_seconds() < self.cache_expiry_hours * 3600
             ):
-                return data.get("venues", None)
+                venues = data.get("venues", None)
+                logger.debug(f"キャッシュ有効（{(now - cached_date).total_seconds():.0f}秒経過）: {venues}")
+                return venues
 
+            logger.debug("キャッシュ期限切れ")
             return None
 
         except Exception as e:
@@ -274,6 +271,7 @@ class VenueManager:
                 json.dump(
                     {"date": datetime.now().isoformat(), "venues": venues}, f, ensure_ascii=False
                 )
+            logger.debug(f"キャッシュ保存: {venues}")
         except Exception as e:
             logger.debug(f"キャッシュ保存エラー: {e}")
 
