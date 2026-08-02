@@ -23,6 +23,22 @@ ALL_VENUES = [
     "児島", "宮島", "芦屋", "福岡", "唐津", "大村",
 ]
 
+# 各会場の第1レース開始時刻（実開催情報）
+VENUE_START_TIMES = {
+    "桐生": 15,      # 15:28
+    "多摩川": 11,    # 11:32
+    "浜名湖": 11,    # 11:24
+    "常滑": 11,      # 11:07
+    "びわこ": 11,    # 11:10
+    "尼崎": 11,      # 11時台
+    "丸亀": 11,      # 11時台
+    "児島": 11,      # 11時台
+    "若松": 10,      # 10時台
+    "芦屋": 13,      # 13時台
+    "福岡": 12,      # 12時台
+    "唐津": 12,      # 12時台
+}
+
 WEATHERS = ["sunny", "cloudy", "rainy"]
 WATER_CONDITIONS = ["calm", "slight", "moderate"]
 WEATHER_WEIGHT = [0.5, 0.35, 0.15]
@@ -34,19 +50,23 @@ def _random_race_id(date: datetime, venue: str, race_number: int) -> str:
     return f"{date_str}_{venue_code}_{race_number:02d}"
 
 
-def _make_race(date: datetime, venue: str, race_number: int, hour: int) -> dict:
+def _make_race(date: datetime, venue: str, race_number: int, hour: int, minute: int = 0) -> dict:
     weather = random.choices(WEATHERS, weights=WEATHER_WEIGHT)[0]
     water = random.choice(WATER_CONDITIONS)
+    
+    # start_time_hour は時間のみ（分は含まない）
+    start_time_hour = hour
+    
     return {
         "race_id": _random_race_id(date, venue, race_number),
-        "date": date.replace(hour=hour, minute=0, second=0, microsecond=0),
+        "date": date.replace(hour=hour, minute=minute, second=0, microsecond=0),
         "venue": venue,
         "place": venue,
         "race_number": race_number,
         "weather": weather,
         "water_condition": water,
         "water_surface": water,
-        "start_time_hour": hour,
+        "start_time_hour": start_time_hour,
         "time_of_day": "morning" if hour < 12 else ("midday" if hour < 17 else "evening"),
         "number_of_boats": 6,
         "wind_speed": round(random.uniform(0, 5), 1),
@@ -75,8 +95,8 @@ def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: flo
     }
 
 
-def create_today_races(session, db, target_date: datetime, num_races: int = 10) -> list:
-    """当日のレースデータを作成（開催中の会場から選択、現在時刻より30分以上後のレースのみ）"""
+def create_today_races(session, db, target_date: datetime) -> list:
+    """当日のレースデータを作成（実開催会場、各会場12レース、現在時刻以降のみ）"""
     now = datetime.now()
     
     # 2026年8月2日の公式開催場所
@@ -91,57 +111,52 @@ def create_today_races(session, db, target_date: datetime, num_races: int = 10) 
     else:
         available_venues = ALL_VENUES
     
-    # 利用可能な会場からランダムに選択
-    venues_today = random.sample(available_venues, min(num_races, len(available_venues)))
-    
-    # 実開催時間を設定（リアルな時刻）
-    # ボートレースの一般的な開催時間: 8:00～22:00, 1レースおよそ20分
-    if target_date.date() == now.date():
-        # 当日: 現在時刻の30分以上後から開催
-        current_hour = now.hour
-        current_minute = now.minute
-        
-        # 最初のレース時刻を決定
-        if current_minute < 30:
-            start_hour = current_hour + 1
-        else:
-            start_hour = current_hour + 2
-        
-        # 最終レースは22:00まで
-        start_hour = max(8, min(start_hour, 21))
-        
-        # レース時刻を生成（1時間ごと）
-        hours = []
-        for i in range(num_races):
-            race_hour = start_hour + i
-            if race_hour <= 22:
-                hours.append(race_hour)
-        
-        # 不足分はランダムに生成
-        while len(hours) < num_races:
-            hours.append(random.randint(start_hour, 22))
-        
-        hours = hours[:num_races]
-    else:
-        # 翌日以降: 8:00～22:00の間でランダム生成
-        hours = [random.randint(8, 22) for _ in range(num_races)]
-    
     created = []
-    for i, venue in enumerate(venues_today):
-        hour = hours[i] if i < len(hours) else random.randint(8, 22)
-        race_number = i + 1
+    
+    # 各会場ごとに12レースを生成
+    for venue in available_venues:
+        # 会場ごとの第1レース開始時刻
+        start_hour = VENUE_START_TIMES.get(venue, 11)
+        start_minute = random.randint(0, 59)  # 分はランダム
         
-        race_data = _make_race(target_date, venue, race_number, hour)
-        
-        # 既存チェック
-        existing = db.get_race(session, race_data["race_id"])
-        if existing:
-            created.append(existing)
+        # 当日の場合、現在時刻以降のレースのみ生成
+        if target_date.date() == now.date():
+            # 現在時刻より前のレースはスキップ
+            race_start = target_date.replace(hour=start_hour, minute=start_minute)
+            if race_start < now:
+                # 最初のレースが現在時刻を過ぎている場合、次のレース時刻から開始
+                elapsed_minutes = int((now - race_start).total_seconds() / 60)
+                races_passed = elapsed_minutes // 20  # 20分ごと
+                first_race_number = races_passed + 1
+            else:
+                first_race_number = 1
         else:
-            race = Race(**race_data)
-            session.add(race)
-            session.flush()
-            created.append(race)
+            first_race_number = 1
+        
+        # 各会場12レース生成
+        for race_number in range(first_race_number, 13):
+            # 第1レースから20分ごと
+            minutes_offset = (race_number - 1) * 20
+            total_minutes = start_hour * 60 + start_minute + minutes_offset
+            
+            # 24時間を超える場合はスキップ
+            if total_minutes >= 24 * 60:
+                break
+            
+            race_hour = total_minutes // 60
+            race_minute = total_minutes % 60
+            
+            race_data = _make_race(target_date, venue, race_number, race_hour, race_minute)
+            
+            # 既存チェック
+            existing = db.get_race(session, race_data["race_id"])
+            if existing:
+                created.append(existing)
+            else:
+                race = Race(**race_data)
+                session.add(race)
+                session.flush()
+                created.append(race)
     
     session.commit()
     return created
@@ -155,33 +170,42 @@ def create_historical_data(session, db, days: int = 30) -> int:
 
     for day_offset in range(1, days + 1):
         target_date = today - timedelta(days=day_offset)
-        num_venues = random.randint(5, 10)
-        venues_day = random.sample(ALL_VENUES, num_venues)
         
-        # リアルな開催時刻
-        hours = [8, 10, 12, 14, 16, 18, 20, 22]
+        # 過去データは全24場で各12レース
+        for venue in ALL_VENUES:
+            start_hour = VENUE_START_TIMES.get(venue, 11)
+            start_minute = random.randint(0, 59)
+            
+            # 各会場12レース
+            for race_number in range(1, 13):
+                minutes_offset = (race_number - 1) * 20
+                total_minutes = start_hour * 60 + start_minute + minutes_offset
+                
+                if total_minutes >= 24 * 60:
+                    break
+                
+                race_hour = total_minutes // 60
+                race_minute = total_minutes % 60
+                
+                race_data = _make_race(target_date, venue, race_number, race_hour, race_minute)
+                
+                existing = db.get_race(session, race_data["race_id"])
+                if existing:
+                    race_id = existing.race_id
+                else:
+                    race = Race(**race_data)
+                    session.add(race)
+                    session.flush()
+                    race_id = race.race_id
+                total_races += 1
 
-        for i, venue in enumerate(venues_day):
-            hour = hours[i % len(hours)]
-            race_data = _make_race(target_date, venue, i + 1, hour)
-
-            existing = db.get_race(session, race_data["race_id"])
-            if existing:
-                race_id = existing.race_id
-            else:
-                race = Race(**race_data)
-                session.add(race)
-                session.flush()
-                race_id = race.race_id
-            total_races += 1
-
-            # 過去予測（的中率 ~55%）
-            is_hit = random.random() < 0.55
-            confidence = round(random.uniform(0.55, 0.90), 2)
-            pred_data = _make_prediction(race_id, target_date, is_hit, confidence)
-            pred = Prediction(**pred_data)
-            session.add(pred)
-            total_predictions += 1
+                # 過去予測（的中率 ~55%）
+                is_hit = random.random() < 0.55
+                confidence = round(random.uniform(0.55, 0.90), 2)
+                pred_data = _make_prediction(race_id, target_date, is_hit, confidence)
+                pred = Prediction(**pred_data)
+                session.add(pred)
+                total_predictions += 1
 
     session.commit()
     return total_races, total_predictions
@@ -189,9 +213,9 @@ def create_historical_data(session, db, days: int = 30) -> int:
 
 def main():
     print()
-    print("━" * 50)
+    print("━" * 60)
     print("レースデータ初期化スクリプト")
-    print("━" * 50)
+    print("━" * 60)
     print()
 
     db = get_db_manager()
@@ -204,17 +228,26 @@ def main():
         # 当日レース
         print("📅 当日レースデータを生成中...")
         print(f"   現在時刻: {today.strftime('%H:%M:%S')}")
-        today_races = create_today_races(session, db, today, num_races=10)
+        today_races = create_today_races(session, db, today)
         print(f"  ✅ 当日レース: {len(today_races)}件")
+        
+        # 会場ごとにグループ化して表示
+        venues_dict = {}
         for r in today_races:
-            place = r.place or r.venue or "?"
-            print(f"    - {place}競艇場 {r.race_number}レース "
-                  f"({r.start_time_hour}:00, {r.weather}, {r.water_condition})")
+            venue = r.place or r.venue or "?"
+            if venue not in venues_dict:
+                venues_dict[venue] = []
+            venues_dict[venue].append(r)
+        
+        for venue in sorted(venues_dict.keys()):
+            races = venues_dict[venue]
+            times = ", ".join([f"{r.start_time_hour}:{str(r.date.minute).zfill(2)}" for r in races[:3]])
+            print(f"    - {venue}競艇場: {len(races)}レース ({times}...)")
 
         # 翌日レース
         print()
         print("📅 翌日レースデータを生成中...")
-        tomorrow_races = create_today_races(session, db, tomorrow, num_races=10)
+        tomorrow_races = create_today_races(session, db, tomorrow)
         print(f"  ✅ 翌日レース: {len(tomorrow_races)}件")
 
         # 過去30日間データ
@@ -229,7 +262,7 @@ def main():
         all_today = db.get_races_by_date(session, today)
         print(f"✅ 当日合計: {len(all_today)}件のレースが登録されています")
         print()
-        print("━" * 50)
+        print("━" * 60)
         print("セットアップ完了！")
         print()
         print("次のコマンドで動作を確認してください：")
@@ -237,7 +270,7 @@ def main():
         print("  python main.py --mode predict-tomorrow")
         print("  python main.py --mode stats")
         print("  python main.py --mode run-server  (Web UI)")
-        print("━" * 50)
+        print("━" * 60)
         print()
 
     except Exception as e:
