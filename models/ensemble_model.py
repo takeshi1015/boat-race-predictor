@@ -11,6 +11,7 @@ import numpy as np
 import config
 from utils.logger import setup_logger
 from utils.venue_manager import VenueManager
+from utils.race_time import get_race_datetime, is_race_purchasable
 
 logger = setup_logger(__name__)
 
@@ -27,10 +28,6 @@ _WATER_REASONS = {
     "moderate": "波が中程度で1号艇有利",
     "rough": "荒れた水面で波乱含みの展開",
 }
-
-# ボートレースの購入締め切り時間（レース開始の何分前まで購入可能か）
-RACE_TICKET_CUTOFF_MINUTES = 5
-
 
 def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -> float:
     """条件から信頼度スコアを算出"""
@@ -56,20 +53,6 @@ def _make_prediction_order(race_number: int, weather: str) -> list:
     elif race_number % 3 == 0:
         base = [1, 3, 2, 4, 5, 6]
     return base[:3]
-
-
-def _is_race_purchasable(race_datetime: datetime) -> bool:
-    """レースが現在購入可能か判定
-    
-    Args:
-        race_datetime: レース開始日時
-        
-    Returns:
-        True: 購入可能, False: 購入不可
-    """
-    now = datetime.now()
-    cutoff_time = race_datetime - timedelta(minutes=RACE_TICKET_CUTOFF_MINUTES)
-    return now <= cutoff_time
 
 
 class EnsembleModel:
@@ -114,12 +97,16 @@ class EnsembleModel:
             for race in races:
                 # 開催中のレース場のみを処理
                 venue_name = getattr(race, "place", None) or getattr(race, "venue", None)
-                race_datetime = getattr(race, "date", None)
+                race_datetime = get_race_datetime(race)
                 race_num = getattr(race, "race_number", "?")
                 
                 # 開催中か確認
                 if venue_name not in operating_venues:
                     logger.debug(f"❌ {venue_name} {race_num}R - レース場が非開催のため除外")
+                    continue
+
+                if not race_datetime or not is_race_purchasable(race_datetime, race_datetime, now):
+                    logger.debug(f"❌ {venue_name} {race_num}R - 購入対象外の時刻のため除外")
                     continue
                 
                 time_str = race_datetime.strftime('%H:%M') if race_datetime else '?'
@@ -129,6 +116,7 @@ class EnsembleModel:
                 if pred:
                     predictions.append(pred)
             
+            predictions.sort(key=lambda item: item.get("confidence", 0.0), reverse=True)
             logger.info(f"{period}予測完了: {len(predictions)}件")
             return predictions
         except Exception as e:
@@ -161,7 +149,7 @@ class EnsembleModel:
             if water_reason:
                 reason = reason + "。" + water_reason if reason else water_reason
 
-            date_val = getattr(race, "date", datetime.now())
+            date_val = get_race_datetime(race) or datetime.now()
             date_str = date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val)
 
             # レース時刻と購入制限時刻の計算
@@ -173,13 +161,13 @@ class EnsembleModel:
             
             if isinstance(date_val, datetime):
                 race_time_str = date_val.strftime('%H:%M')
-                deadline_dt = date_val - timedelta(minutes=RACE_TICKET_CUTOFF_MINUTES)
+                deadline_dt = date_val - timedelta(minutes=10)
                 purchase_deadline_str = deadline_dt.strftime('%H:%M')
                 purchase_deadline_iso = deadline_dt.isoformat()
                 
                 now = datetime.now()
-                is_purchasable = now <= deadline_dt
-                time_remaining = max(0, int((deadline_dt - now).total_seconds()))
+                is_purchasable = is_race_purchasable(date_val, date_val, now)
+                time_remaining = max(0, int((date_val - now).total_seconds()))
 
             return {
                 "race_id": getattr(race, "race_id", "unknown"),

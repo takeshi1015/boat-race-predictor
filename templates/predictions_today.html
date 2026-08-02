@@ -15,10 +15,10 @@
   </div>
 </div>
 
-<!-- 高信頼度予想（80%以上）-->
+<!-- 高信頼度予想（70%以上）-->
 <div class="mb-5">
   <h3 class="fw-bold text-success mb-3">
-    <i class="bi bi-check-circle-fill me-2"></i>✅ 確実性の高い予想 - 本命狙い
+    <i class="bi bi-check-circle-fill me-2"></i>✅ 信頼度70%以上の予想 - 本命狙い
   </h3>
   <div id="high-confidence-cards" class="row g-3">
     <div class="col-12 text-center py-5 text-muted">
@@ -31,7 +31,7 @@
 <!-- 穴狙い予想（50-70%）-->
 <div class="mb-5">
   <h3 class="fw-bold text-warning mb-3">
-    <i class="bi bi-bullseye me-2"></i>💰 穴確率が高い予想 - 配当狙い
+    <i class="bi bi-bullseye me-2"></i>💰 信頼度70%未満の予想 - 配当狙い
   </h3>
   <div id="high-odds-cards" class="row g-3">
     <div class="col-12 text-center py-5 text-muted">
@@ -152,14 +152,13 @@ async function loadPredictions() {
 
     const predictions = data.predictions || [];
     
-    // 高信頼度（80%以上）
-    const highConf = predictions.filter(p => p.confidence >= 0.80);
+    // 高信頼度（70%以上）
+    const highConf = predictions.filter(p => p.confidence >= 0.70);
     
     // 穴狙い（50-70%、高信頼度と重複なし）
     const usedVenues = new Set(highConf.map(p => p.place || p.venue));
     const highOdds = predictions.filter(p => 
-      p.confidence >= 0.50 && 
-      p.confidence < 0.80 &&
+      p.confidence < 0.70 &&
       !(usedVenues.has(p.place || p.venue))
     );
 

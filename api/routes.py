@@ -340,7 +340,11 @@ def get_today_races() -> Response:
     try:
         from models.ensemble_model import EnsembleModel
         model = EnsembleModel()
-        predictions = model.predict_today()
+        predictions = [
+            prediction for prediction in model.predict_today()
+            if prediction.get("is_purchasable") is True
+        ]
+        predictions.sort(key=lambda item: item.get("confidence", 0.0), reverse=True)
         return jsonify({
             "date": datetime.now().strftime("%Y-%m-%d"),
             "count": len(predictions),

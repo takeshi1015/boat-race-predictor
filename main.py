@@ -31,6 +31,7 @@ def main():
             "retrain",
             "stats",
             "predict",
+            "predict-live",
             "web",
             "api",
             "run-server",
@@ -41,6 +42,7 @@ def main():
             "'run' starts the continuous scheduler, "
             "'web'/'api'/'run-server' start the Flask web/API server, "
             "'predict' runs a demo prediction, "
+            "'predict-live' fetches official races, runs live predictions, and saves them, "
             "'predict-today/tomorrow' run the scheduler's daily tasks, "
             "'analyze' analyses performance, "
             "'retrain' retrains models, "
@@ -90,6 +92,8 @@ def main():
             _show_stats()
         elif args.mode == "predict":
             _run_all_models_demo(export=args.export)
+        elif args.mode == "predict-live":
+            _run_live_predictions()
         elif args.mode in ("web", "api", "run-server"):
             _run_web_server()
         
@@ -210,6 +214,9 @@ def _show_usage() -> None:
     print("     python main.py --mode run-server")
     print("     → http://localhost:5000/ でアクセス")
     print()
+    print("  7. 公式レースを取得してライブ予測")
+    print("     python main.py --mode predict-live")
+    print()
     print("【初回セットアップ】")
     print("  python scripts/init_test_data.py")
     print()
@@ -310,6 +317,14 @@ def _run_web_server() -> None:
         port=config.WEB_PORT,
         debug=config.WEB_DEBUG,
     )
+
+
+def _run_live_predictions() -> None:
+    """Fetch official races, run live predictions, and persist results."""
+    from scripts.fetch_and_predict import fetch_and_predict
+
+    summary = fetch_and_predict()
+    logger.info("Live prediction summary: %s", summary)
 
 
 def _run_all_models_demo(export: Optional[Literal["json", "csv", "all"]] = None) -> None:
@@ -414,4 +429,3 @@ def _run_all_models_demo(export: Optional[Literal["json", "csv", "all"]] = None)
 
 if __name__ == "__main__":
     main()
-
