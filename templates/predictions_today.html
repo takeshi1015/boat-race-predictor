@@ -15,21 +15,43 @@
   </div>
 </div>
 
-<!-- 購入可能な予測のバナー -->
-<div id="buyable-banner" class="alert alert-success d-flex align-items-center mb-4 d-none" role="alert">
-  <i class="bi bi-cash-coin fs-4 me-3"></i>
-  <div>
-    <strong>購入可能な予想（信頼度 70%以上）:</strong>
-    <span id="buyable-count" class="ms-2 fw-bold fs-5">0件</span>
+<!-- ローディング -->
+<div id="loading-state" class="col-12 text-center py-5 text-muted">
+  <div class="spinner-border" role="status"></div>
+  <p class="mt-2">当日予想を読み込んでいます…</p>
+</div>
+
+<!-- データなし -->
+<div id="empty-state" class="col-12 d-none">
+  <div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    当日のレースデータがありません。<br>
+    <code>python scripts/init_test_data.py</code> を実行してテストデータを追加してください。
   </div>
 </div>
 
-<!-- 予想カード一覧 -->
-<div id="prediction-cards" class="row g-3 mb-4">
-  <div class="col-12 text-center py-5 text-muted">
-    <div class="spinner-border" role="status"></div>
-    <p class="mt-2">当日予想を読み込んでいます…</p>
+<!-- ✅ 高信頼度セクション -->
+<div id="section-high-confidence" class="section-high-confidence mb-5 d-none">
+  <div class="section-header-confidence d-flex align-items-center mb-3">
+    <span class="fs-4 me-2">✅</span>
+    <div>
+      <h4 class="mb-0 fw-bold text-success">確実性の高い予想 - 本命狙い</h4>
+      <p class="text-muted small mb-0">信頼度 80% 以上 TOP 5 ｜ 過去実績・統計データに基づく厳選予想</p>
+    </div>
   </div>
+  <div id="high-confidence-cards" class="row g-3"></div>
+</div>
+
+<!-- 💰 穴狙いセクション -->
+<div id="section-high-odds" class="section-high-odds mb-5 d-none">
+  <div class="section-header-odds d-flex align-items-center mb-3">
+    <span class="fs-4 me-2">💰</span>
+    <div>
+      <h4 class="mb-0 fw-bold text-warning">穴確率が高い予想 - 配当狙い</h4>
+      <p class="text-muted small mb-0">信頼度 50〜70% かつ 推定オッズ 30倍以上 TOP 5 ｜ 高配当・リスク承知</p>
+    </div>
+  </div>
+  <div id="high-odds-cards" class="row g-3"></div>
 </div>
 
 <p class="text-end text-muted small">最終更新: <span id="last-updated">-</span></p>
@@ -37,27 +59,83 @@
 
 {% block scripts_extra %}
 <script>
-const CONFIDENCE_THRESHOLD = 0.7;
-
 function starsHtml(confidence) {
   const filled = Math.round(confidence * 5);
   return "⭐".repeat(filled) + "☆".repeat(5 - filled);
 }
 
-function badgeClass(confidence) {
-  if (confidence >= 0.8) return "bg-success";
-  if (confidence >= 0.7) return "bg-primary";
-  if (confidence >= 0.6) return "bg-warning text-dark";
-  return "bg-secondary";
+function buildConfidenceCard(pred) {
+  const order = (pred.predicted_order || []).join("-") || "-";
+  const conf = pred.confidence || 0;
+  const confPct = (conf * 100).toFixed(1);
+  return `
+    <div class="col-md-6 col-lg-4">
+      <div class="card shadow-sm h-100 card-high-confidence">
+        <div class="card-header d-flex justify-content-between align-items-center card-header-confidence">
+          <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
+          <span class="badge bg-secondary">${pred.race_number}レース</span>
+        </div>
+        <div class="card-body">
+          <div class="text-center mb-3">
+            <span class="display-6 fw-bold text-success">${order}</span>
+            <p class="text-muted small mb-0">推奨買い目</p>
+          </div>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="badge-success-custom">【購入推奨】</span>
+            <span class="text-success fw-bold">◎ 本命</span>
+          </div>
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <span class="text-warning">${starsHtml(conf)}</span>
+            <span class="fw-bold">${confPct}%</span>
+          </div>
+          <div class="progress mb-3" style="height:8px">
+            <div class="progress-bar bg-success" style="width:${confPct}%"></div>
+          </div>
+          ${pred.reason ? `<p class="reason text-muted small mb-0"><i class="bi bi-check-circle-fill text-success me-1"></i>${pred.reason}</p>` : ""}
+        </div>
+      </div>
+    </div>`;
 }
 
-function labelText(confidence) {
-  return confidence >= CONFIDENCE_THRESHOLD ? "購入可能" : "参考情報";
+function buildOddsCard(pred) {
+  const order = (pred.predicted_order || []).join("-") || "-";
+  const conf = pred.confidence || 0;
+  const confPct = (conf * 100).toFixed(1);
+  const odds = pred.estimated_odds ? pred.estimated_odds.toFixed(1) : "-";
+  return `
+    <div class="col-md-6 col-lg-4">
+      <div class="card shadow-sm h-100 card-high-odds">
+        <div class="card-header d-flex justify-content-between align-items-center card-header-odds">
+          <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
+          <span class="badge bg-secondary">${pred.race_number}レース</span>
+        </div>
+        <div class="card-body">
+          <div class="text-center mb-3">
+            <span class="display-6 fw-bold text-warning">${order}</span>
+            <p class="text-muted small mb-0">推奨買い目</p>
+          </div>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="badge-warning-custom">【穴狙い】</span>
+            <span class="text-warning fw-bold">推定 ${odds}倍</span>
+          </div>
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <span class="text-warning">${starsHtml(conf)}</span>
+            <span class="fw-bold">${confPct}%</span>
+          </div>
+          <div class="progress mb-3" style="height:8px">
+            <div class="progress-bar bg-warning" style="width:${confPct}%"></div>
+          </div>
+          ${pred.reason ? `<p class="reason text-muted small mb-0"><i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>${pred.reason}</p>` : ""}
+        </div>
+      </div>
+    </div>`;
 }
 
 async function loadPredictions() {
-  const container = document.getElementById("prediction-cards");
-  container.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
+  document.getElementById("loading-state").classList.remove("d-none");
+  document.getElementById("empty-state").classList.add("d-none");
+  document.getElementById("section-high-confidence").classList.add("d-none");
+  document.getElementById("section-high-odds").classList.add("d-none");
 
   try {
     const res = await fetch("/api/races/today");
@@ -65,63 +143,30 @@ async function loadPredictions() {
 
     document.getElementById("today-date").textContent = data.date || "";
     document.getElementById("last-updated").textContent = new Date().toLocaleString("ja-JP");
+    document.getElementById("loading-state").classList.add("d-none");
 
-    const predictions = data.predictions || [];
-    const buyable = predictions.filter(p => p.confidence >= CONFIDENCE_THRESHOLD);
+    const highConf = data.high_confidence || [];
+    const highOdds = data.high_odds || [];
 
-    const banner = document.getElementById("buyable-banner");
-    document.getElementById("buyable-count").textContent = buyable.length + "件";
-    banner.classList.toggle("d-none", buyable.length === 0);
-
-    if (predictions.length === 0) {
-      container.innerHTML = `
-        <div class="col-12">
-          <div class="alert alert-warning">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            当日のレースデータがありません。<br>
-            <code>python scripts/init_test_data.py</code> を実行してテストデータを追加してください。
-          </div>
-        </div>`;
+    if (highConf.length === 0 && highOdds.length === 0) {
+      document.getElementById("empty-state").classList.remove("d-none");
       return;
     }
 
-    container.innerHTML = "";
-    predictions.forEach(pred => {
-      const order = (pred.predicted_order || []).join("-") || "-";
-      const conf = pred.confidence || 0;
-      const confPct = (conf * 100).toFixed(1);
-      const card = document.createElement("div");
-      card.className = "col-md-6 col-lg-4";
-      card.innerHTML = `
-        <div class="card shadow-sm h-100 ${conf >= CONFIDENCE_THRESHOLD ? 'border-success' : ''}">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
-            <span class="badge bg-secondary">${pred.race_number}レース</span>
-          </div>
-          <div class="card-body">
-            <div class="text-center mb-3">
-              <span class="display-6 fw-bold text-primary">${order}</span>
-              <p class="text-muted small mb-0">推奨買い目</p>
-            </div>
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="text-muted small">信頼度</span>
-              <span class="badge ${badgeClass(conf)}">${labelText(conf)}</span>
-            </div>
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="text-warning">${starsHtml(conf)}</span>
-              <span class="fw-bold">${confPct}%</span>
-            </div>
-            <div class="progress mb-3" style="height:8px">
-              <div class="progress-bar ${conf >= CONFIDENCE_THRESHOLD ? 'bg-success' : 'bg-warning'}"
-                   style="width:${confPct}%"></div>
-            </div>
-            ${pred.reason ? `<p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>${pred.reason}</p>` : ""}
-          </div>
-        </div>`;
-      container.appendChild(card);
-    });
+    if (highConf.length > 0) {
+      document.getElementById("high-confidence-cards").innerHTML = highConf.map(buildConfidenceCard).join("");
+      document.getElementById("section-high-confidence").classList.remove("d-none");
+    }
+
+    if (highOdds.length > 0) {
+      document.getElementById("high-odds-cards").innerHTML = highOdds.map(buildOddsCard).join("");
+      document.getElementById("section-high-odds").classList.remove("d-none");
+    }
   } catch (e) {
-    container.innerHTML = `<div class="col-12"><div class="alert alert-danger">データの読み込みに失敗しました: ${e.message}</div></div>`;
+    document.getElementById("loading-state").classList.add("d-none");
+    document.getElementById("empty-state").classList.remove("d-none");
+    document.getElementById("empty-state").innerHTML =
+      `<div class="alert alert-danger">データの読み込みに失敗しました: ${e.message}</div>`;
   }
 }
 

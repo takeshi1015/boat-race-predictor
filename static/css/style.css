@@ -98,3 +98,81 @@ pre {
     max-height: 200px;
   }
 }
+
+/* ============================================================
+   Prediction category styles
+   ============================================================ */
+
+/* ---------- Section wrappers ---------- */
+.section-high-confidence {
+  border-left: 4px solid #4CAF50;
+  padding-left: 1rem;
+}
+
+.section-high-odds {
+  border-left: 4px solid #FF9800;
+  padding-left: 1rem;
+}
+
+/* ---------- Section headers ---------- */
+.section-header-confidence {
+  border-bottom: 2px solid #c8e6c9;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.section-header-odds {
+  border-bottom: 2px solid #ffe0b2;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+/* ---------- Cards ---------- */
+.card-high-confidence {
+  border: 2px solid #4CAF50 !important;
+  border-radius: 0.75rem;
+}
+
+.card-high-odds {
+  border: 2px solid #FF9800 !important;
+  border-radius: 0.75rem;
+}
+
+/* ---------- Card headers ---------- */
+.card-header-confidence {
+  background-color: #e8f5e9 !important;
+}
+
+.card-header-odds {
+  background-color: #fff3e0 !important;
+}
+
+/* ---------- Badges ---------- */
+.badge-success-custom {
+  display: inline-block;
+  padding: 0.3em 0.65em;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  background-color: #4CAF50;
+  border-radius: 0.375rem;
+}
+
+.badge-warning-custom {
+  display: inline-block;
+  padding: 0.3em 0.65em;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  background-color: #FF9800;
+  border-radius: 0.375rem;
+}
+
+/* ---------- Reason text ---------- */
+.reason {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding-top: 0.5rem;
+  margin-top: 0.25rem;
+}
