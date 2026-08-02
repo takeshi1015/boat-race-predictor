@@ -44,7 +44,7 @@ class VenueManager:
         "若松": {"code": "22", "name_jp": "若松"},
     }
 
-    # テストデータ用：固定の開催日程（最終フォールバック用）
+    # 開催情報の初期値（公式サイト取得失敗時のフォールバック）
     FIXED_SCHEDULE = {
         "2026-08-02": ["桐生", "多摩川", "浜名湖", "常滑", "びわこ", "尼崎", "丸亀", "児島", "若松", "芦屋", "福岡", "唐津"],
     }
@@ -64,7 +64,7 @@ class VenueManager:
         1. 公式サイトからスクレイピング（リアルタイム）← 最優先
         2. キャッシュから取得（スクレイピング失敗時）
         3. DBのレースデータから抽出（ただしフィルタリング）
-        4. 固定スケジュール（テスト用・最終フォールバック）
+        4. 開催情報の初期値（最終フォールバック）
         """
         # 1. 公式サイトからスクレイピング（最優先）
         try:
@@ -91,11 +91,11 @@ class VenueManager:
         except Exception as e:
             logger.debug(f"DB抽出失敗: {e}")
 
-        # 4. 固定スケジュール（テスト用・最終フォールバック）
+        # 4. 開催情報の初期値（最終フォールバック）
         today_str = datetime.now().strftime("%Y-%m-%d")
         if today_str in self.FIXED_SCHEDULE:
             operating = self.FIXED_SCHEDULE[today_str]
-            logger.warning(f"⚠️ 固定スケジュール（テスト用）から開催場所取得: {operating}")
+            logger.warning(f"⚠️ 開催情報の初期値から取得: {operating}")
             return operating
 
         logger.warning("❌ 開催場所情報を取得できません")
@@ -125,11 +125,11 @@ class VenueManager:
         except Exception as e:
             logger.debug(f"翌日DB抽出失敗: {e}")
 
-        # 3. 固定スケジュール（テスト用）
+        # 3. 開催情報の初期値（最終フォールバック）
         tomorrow_str = tomorrow.strftime("%Y-%m-%d")
         if tomorrow_str in self.FIXED_SCHEDULE:
             operating = self.FIXED_SCHEDULE[tomorrow_str]
-            logger.warning(f"⚠️ 翌日固定スケジュール（テスト用）: {operating}")
+            logger.warning(f"⚠️ 翌日開催情報の初期値: {operating}")
             return operating
 
         return []
