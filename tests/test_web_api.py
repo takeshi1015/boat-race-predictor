@@ -133,6 +133,28 @@ def test_post_predict_invalid_body(client):
     assert response.status_code == 400
 
 
+def test_api_today_races_filters_unpurchasable_and_sorts(client, monkeypatch):
+    """GET /api/races/today should return only purchasable races sorted by confidence."""
+    from models.ensemble_model import EnsembleModel
+
+    monkeypatch.setattr(
+        EnsembleModel,
+        "predict_today",
+        lambda self: [
+            {"race_id": "expired", "confidence": 0.99, "is_purchasable": False},
+            {"race_id": "second", "confidence": 0.70, "is_purchasable": True},
+            {"race_id": "first", "confidence": 0.85, "is_purchasable": True},
+        ],
+    )
+
+    response = client.get("/api/races/today")
+
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["count"] == 2
+    assert [item["race_id"] for item in data["predictions"]] == ["first", "second"]
+
+
 # ---------------------------------------------------------------------------
 # File export via CLI helper
 # ---------------------------------------------------------------------------
