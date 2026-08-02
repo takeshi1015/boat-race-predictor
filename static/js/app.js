@@ -192,3 +192,35 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 });
+
+// ── Race countdown timer ──────────────────────────────────────────────────
+// Updates .time-remaining spans and toggles state classes every second.
+setInterval(() => {
+  document.querySelectorAll(".race-item[data-deadline]").forEach((el) => {
+    const deadline = el.dataset.deadline;
+    if (!deadline) return;
+
+    const now = new Date();
+    const remaining = Math.max(0, (new Date(deadline) - now) / 1000);
+
+    // Update remaining time text
+    const timeEl = el.querySelector(".time-remaining");
+    if (timeEl) {
+      const min = Math.floor(remaining / 60);
+      const sec = Math.floor(remaining % 60);
+      timeEl.textContent = `${min}分${sec}秒`;
+    }
+
+    // Update state class
+    if (remaining <= 0) {
+      el.classList.add("expired");
+      el.classList.remove("urgent", "available");
+    } else if (remaining <= 300) {
+      el.classList.add("urgent");
+      el.classList.remove("expired", "available");
+    } else {
+      el.classList.add("available");
+      el.classList.remove("urgent", "expired");
+    }
+  });
+}, 1000);
