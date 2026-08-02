@@ -5,7 +5,7 @@
 {% block content %}
 <div class="row mb-4 align-items-center">
   <div class="col">
-    <h2 class="fw-bold"><i class="bi bi-calendar2-plus me-2 text-primary"></i>翌日予想</h2>
+    <h2 class="fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>翌日予想</h2>
     <p class="text-muted mb-0" id="tomorrow-date">読み込み中…</p>
   </div>
   <div class="col-auto">
@@ -15,11 +15,36 @@
   </div>
 </div>
 
-<!-- 予想カード一覧 -->
-<div id="prediction-cards" class="row g-3 mb-4">
-  <div class="col-12 text-center py-5 text-muted">
-    <div class="spinner-border" role="status"></div>
-    <p class="mt-2">翌日予想を読み込んでいます…</p>
+<!-- 情報バナー -->
+<div class="alert alert-info mb-4">
+  <i class="bi bi-info-circle me-2"></i>
+  <strong>ℹ️ 翌日のレースについて</strong><br>
+  翌日のレースのため、購入開始時刻は明朝となります。
+</div>
+
+<!-- 高信頼度予想（80%以上）-->
+<div class="mb-5">
+  <h3 class="fw-bold text-success mb-3">
+    <i class="bi bi-check-circle-fill me-2"></i>✅ 確実性の高い予想 - 本命狙い
+  </h3>
+  <div id="high-confidence-cards" class="row g-3">
+    <div class="col-12 text-center py-5 text-muted">
+      <div class="spinner-border" role="status"></div>
+      <p class="mt-2">読み込み中…</p>
+    </div>
+  </div>
+</div>
+
+<!-- 穴狙い予想（50-70% + 高オッズ）-->
+<div class="mb-5">
+  <h3 class="fw-bold text-warning mb-3">
+    <i class="bi bi-bullseye me-2"></i>💰 穴確率が高い予想 - 配当狙い
+  </h3>
+  <div id="high-odds-cards" class="row g-3">
+    <div class="col-12 text-center py-5 text-muted">
+      <div class="spinner-border" role="status"></div>
+      <p class="mt-2">読み込み中…</p>
+    </div>
   </div>
 </div>
 
@@ -28,89 +53,139 @@
 
 {% block scripts_extra %}
 <script>
-const CONFIDENCE_THRESHOLD = 0.7;
-
 function starsHtml(confidence) {
   const filled = Math.round(confidence * 5);
   return "⭐".repeat(filled) + "☆".repeat(5 - filled);
 }
 
-function badgeClass(confidence) {
-  if (confidence >= 0.8) return "bg-success";
-  if (confidence >= 0.7) return "bg-primary";
-  if (confidence >= 0.6) return "bg-warning text-dark";
-  return "bg-secondary";
+function formatDateTime(iso) {
+  if (!iso) return "?";
+  const d = new Date(iso);
+  return d.toLocaleDateString("ja-JP") + " " + d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
 }
 
-function labelText(confidence) {
-  return confidence >= CONFIDENCE_THRESHOLD ? "購入可能" : "参考情報";
+function createRaceCard(pred, category) {
+  const order = (pred.predicted_order || []).join("-") || "-";
+  const conf = pred.confidence || 0;
+  const confPct = (conf * 100).toFixed(1);
+  const isHighConfidence = category === "high_confidence";
+
+  const card = document.createElement("div");
+  card.className = "col-md-6 col-lg-4";
+
+  const badgeBg = isHighConfidence ? "bg-success" : "bg-warning";
+  const badgeText = isHighConfidence ? "【購入推奨】" : "【穴狙い】";
+
+  const raceDateTime = formatDateTime(pred.date);
+
+  card.innerHTML = `
+    <div class="card shadow-sm h-100 race-item tomorrow">
+      <div class="card-header d-flex justify-content-between align-items-center bg-light">
+        <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
+        <span class="badge bg-info">ℹ️ 明日</span>
+      </div>
+      <div class="card-body">
+        <!-- レース日時 -->
+        <div class="race-time mb-2" style="font-size: 13px; color: #666;">
+          <span><i class="bi bi-calendar me-1"></i> 📅 ${raceDateTime}</span>
+          <span style="display: block;"><i class="bi bi-info-circle me-1"></i> 購入開始: 明朝</span>
+        </div>
+
+        <!-- 推奨買い目 -->
+        <div class="text-center mb-3">
+          <span class="display-6 fw-bold text-primary">${order}</span>
+          <p class="text-muted small mb-0">推奨買い目</p>
+        </div>
+
+        <!-- 信頼度 -->
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="text-muted small">信頼度</span>
+          <span class="badge ${badgeBg}">${badgeText}</span>
+        </div>
+
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="text-warning">${starsHtml(conf)}</span>
+          <span class="fw-bold">${confPct}%</span>
+        </div>
+
+        <div class="progress mb-3" style="height:8px">
+          <div class="progress-bar ${isHighConfidence ? 'bg-success' : 'bg-warning'}"
+               style="width:${confPct}%"></div>
+        </div>
+
+        <!-- 理由 -->
+        ${pred.reason ? `
+          <p class="text-muted small mb-0">
+            <i class="bi bi-info-circle me-1"></i>
+            ${isHighConfidence ? '◎ ' : '△ '}${pred.reason}
+          </p>
+        ` : ""}
+      </div>
+    </div>`;
+
+  return card;
 }
 
 async function loadPredictions() {
-  const container = document.getElementById("prediction-cards");
-  container.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
+  const highConfContainer = document.getElementById("high-confidence-cards");
+  const highOddsContainer = document.getElementById("high-odds-cards");
+
+  highConfContainer.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
+  highOddsContainer.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
 
   try {
     const res = await fetch("/api/races/tomorrow");
     const data = await res.json();
 
-    document.getElementById("tomorrow-date").textContent = data.date ? `${data.date}（翌日）` : "";
+    document.getElementById("tomorrow-date").textContent = data.date || "";
     document.getElementById("last-updated").textContent = new Date().toLocaleString("ja-JP");
 
     const predictions = data.predictions || [];
 
-    if (predictions.length === 0) {
-      container.innerHTML = `
-        <div class="col-12">
-          <div class="alert alert-warning">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            翌日のレースデータがありません。<br>
-            <code>python scripts/init_test_data.py</code> を実行してテストデータを追加してください。
-          </div>
-        </div>`;
+    // 高信頼度（80%以上）
+    const highConf = predictions.filter(p => p.confidence >= 0.80).slice(0, 5);
+
+    // 穴狙い（50-70%、高信頼度と重複なし）
+    const usedVenues = new Set(highConf.map(p => p.place || p.venue));
+    const highOdds = predictions.filter(p =>
+      p.confidence >= 0.50 &&
+      p.confidence <= 0.70 &&
+      !(usedVenues.has(p.place || p.venue))
+    ).slice(0, 5);
+
+    if (highConf.length === 0 && highOdds.length === 0) {
+      highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-warning">翌日のレースデータがありません</div></div>`;
+      highOddsContainer.innerHTML = "";
       return;
     }
 
-    container.innerHTML = "";
-    predictions.forEach(pred => {
-      const order = (pred.predicted_order || []).join("-") || "-";
-      const conf = pred.confidence || 0;
-      const confPct = (conf * 100).toFixed(1);
-      const card = document.createElement("div");
-      card.className = "col-md-6 col-lg-4";
-      card.innerHTML = `
-        <div class="card shadow-sm h-100 ${conf >= CONFIDENCE_THRESHOLD ? 'border-primary' : ''}">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
-            <span class="badge bg-secondary">${pred.race_number}レース</span>
-          </div>
-          <div class="card-body">
-            <div class="text-center mb-3">
-              <span class="display-6 fw-bold text-primary">${order}</span>
-              <p class="text-muted small mb-0">推奨買い目</p>
-            </div>
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="text-muted small">信頼度</span>
-              <span class="badge ${badgeClass(conf)}">${labelText(conf)}</span>
-            </div>
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="text-warning">${starsHtml(conf)}</span>
-              <span class="fw-bold">${confPct}%</span>
-            </div>
-            <div class="progress mb-3" style="height:8px">
-              <div class="progress-bar ${conf >= CONFIDENCE_THRESHOLD ? 'bg-primary' : 'bg-secondary'}"
-                   style="width:${confPct}%"></div>
-            </div>
-            ${pred.reason ? `<p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>${pred.reason}</p>` : ""}
-          </div>
-        </div>`;
-      container.appendChild(card);
-    });
+    // 高信頼度を表示
+    if (highConf.length === 0) {
+      highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">該当する予想がありません</div></div>`;
+    } else {
+      highConfContainer.innerHTML = "";
+      highConf.forEach(pred => {
+        highConfContainer.appendChild(createRaceCard(pred, "high_confidence"));
+      });
+    }
+
+    // 穴狙いを表示
+    if (highOdds.length === 0) {
+      highOddsContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">該当する予想がありません</div></div>`;
+    } else {
+      highOddsContainer.innerHTML = "";
+      highOdds.forEach(pred => {
+        highOddsContainer.appendChild(createRaceCard(pred, "high_odds"));
+      });
+    }
+
   } catch (e) {
-    container.innerHTML = `<div class="col-12"><div class="alert alert-danger">データの読み込みに失敗しました: ${e.message}</div></div>`;
+    highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-danger">データ読み込みエラー: ${e.message}</div></div>`;
+    console.error(e);
   }
 }
 
 document.addEventListener("DOMContentLoaded", loadPredictions);
 </script>
 {% endblock %}
+
