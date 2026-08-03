@@ -526,7 +526,7 @@ def post_backtest() -> Response:
 
     except Exception as exc:
         logger.error("Backtest failed: %s", exc, exc_info=True)
-        return jsonify({"error": "バックテストに失敗しました", "detail": str(exc)}), 500
+        return jsonify({"error": "バックテストに失敗しました"}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -571,7 +571,7 @@ def post_optimize() -> Response:
         })
     except Exception as exc:
         logger.error("Optimize failed: %s", exc, exc_info=True)
-        return jsonify({"error": "最適化に失敗しました", "detail": str(exc)}), 500
+        return jsonify({"error": "最適化に失敗しました"}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -614,5 +614,5 @@ def post_failure_analysis() -> Response:
         })
     except Exception as exc:
         logger.error("Failure analysis failed: %s", exc, exc_info=True)
-        return jsonify({"error": "失敗分析に失敗しました", "detail": str(exc)}), 500
+        return jsonify({"error": "失敗分析に失敗しました"}), 500
 
