@@ -143,7 +143,10 @@ async function refreshAndLoad() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>取得中…';
   }
   try {
-    await fetch("/api/races/refresh", { method: "POST" });
+    const resp = await fetch("/api/races/refresh", { method: "POST" });
+    if (!resp.ok) {
+      console.warn("更新リクエストが失敗しました:", resp.status, resp.statusText);
+    }
   } catch (e) {
     console.warn("更新リクエスト失敗:", e);
   } finally {

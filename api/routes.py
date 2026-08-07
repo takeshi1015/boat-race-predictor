@@ -442,6 +442,7 @@ def refresh_races() -> Response:
     """
     try:
         from src.scraper import RaceDataScraper
+        from src.scheduler import RaceScheduler
 
         scraper = RaceDataScraper()
         races = scraper.fetch_and_save_today()
@@ -451,39 +452,12 @@ def refresh_races() -> Response:
         if races:
             try:
                 from models.ensemble_model import EnsembleModel
-                from database.db_manager import get_db_manager
 
                 model = EnsembleModel()
                 predictions = model.predict_today()
-                db = get_db_manager()
-                session = db.get_session()
-                try:
-                    for pred in predictions:
-                        try:
-                            db.add_prediction(
-                                session,
-                                {
-                                    "race_id": pred.get("race_id", "unknown"),
-                                    "prediction_date": datetime.now(),
-                                    "prediction_type": (
-                                        "high_confidence"
-                                        if pred.get("confidence", 0) >= 0.8
-                                        else "high_odds"
-                                    ),
-                                    "predicted_order": pred.get("predicted_order", []),
-                                    "confidence": pred.get("confidence", 0.0),
-                                    "estimated_odds": 0.0,
-                                    "model_version": "ensemble_v1",
-                                    "methods_used": ["statistical", "rule_based"],
-                                },
-                            )
-                            predictions_saved += 1
-                        except Exception as exc:
-                            logger.warning("予想保存スキップ: %s", exc)
-                finally:
-                    session.close()
+                predictions_saved = RaceScheduler._save_predictions(predictions)
             except Exception as exc:
-                errors.append(str(exc))
+                errors.append("予想生成に失敗しました")
                 logger.error("予想生成エラー: %s", exc, exc_info=True)
 
         return jsonify(
@@ -497,7 +471,7 @@ def refresh_races() -> Response:
         )
     except Exception as exc:
         logger.error("レースデータ更新エラー: %s", exc, exc_info=True)
-        return jsonify({"error": "レースデータの更新に失敗しました", "detail": str(exc)}), 500
+        return jsonify({"error": "レースデータの更新に失敗しました"}), 500
 
 
 # ---------------------------------------------------------------------------

@@ -39,8 +39,8 @@ USER_AGENT = (
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "30"))
 SCRAPER_RETRY_COUNT = int(os.getenv("SCRAPER_RETRY_COUNT", "3"))
 SCRAPER_RETRY_DELAY = int(os.getenv("SCRAPER_RETRY_DELAY", "5"))
-MAX_RETRIES = int(os.getenv("SCRAPER_RETRY_COUNT", "3"))
-RETRY_BACKOFF = int(os.getenv("SCRAPER_RETRY_DELAY", "5"))
+MAX_RETRIES = SCRAPER_RETRY_COUNT
+RETRY_BACKOFF = SCRAPER_RETRY_DELAY
 REQUEST_INTERVAL = float(os.getenv("REQUEST_INTERVAL", "1.0"))  # seconds between requests
 
 # ==================== PREDICTION SETTINGS ====================

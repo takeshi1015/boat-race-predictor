@@ -27,8 +27,8 @@ class RaceScheduler:
     """APScheduler を用いたレース予想自動実行スケジューラー。
 
     毎日朝 5:00 に :meth:`run_daily_task` を実行する。
-    ``SCHEDULE_TODAY`` 環境変数（デフォルト ``"06:00"``）で
-    スケジュール時刻を変更可能。
+    ``DAILY_SCHEDULE_TIME = "05:00"`` で定義されており、変更する場合は
+    このクラス定数を直接変更してください。
     """
 
     DAILY_SCHEDULE_TIME = "05:00"  # 要件: 毎日朝5時

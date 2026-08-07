@@ -395,7 +395,8 @@ class RaceDataScraper:
                     exc,
                 )
                 if attempt < self.MAX_RETRIES:
-                    time.sleep(self.RETRY_BACKOFF ** (attempt - 1))
+                    wait = self.RETRY_BACKOFF * (2 ** (attempt - 1))
+                    time.sleep(wait)
         logger.error("フェッチ失敗（最大リトライ超過）: %s", url)
         return None
 
