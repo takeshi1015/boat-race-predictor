@@ -27,7 +27,11 @@ FEATURE_COLUMNS = [
 
 
 def load_models(model_dir: str = MODEL_DIR) -> dict:
-    """Load all pickled models from model_dir."""
+    """Load all pickled models from model_dir.
+
+    Note: Only load models from a trusted, access-controlled directory.
+    Pickle deserialization can execute arbitrary code if the files are tampered with.
+    """
     if not os.path.isdir(model_dir) or not os.listdir(model_dir):
         raise FileNotFoundError(
             f"{model_dir} にモデルが見つかりません。先に src/train_models.py を実行してください。"
@@ -109,10 +113,10 @@ def predict_race(
 
     # Build result list
     results = []
-    for i, row in features_df.iterrows():
+    for idx, row in enumerate(features_df.itertuples(index=False)):
         results.append({
-            "lane": int(row["lane"]),
-            "win_probability": float(ensemble[i]),
+            "lane": int(row.lane),
+            "win_probability": float(ensemble[idx]),
         })
     results.sort(key=lambda r: r["win_probability"], reverse=True)
 

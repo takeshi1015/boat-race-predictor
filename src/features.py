@@ -76,15 +76,14 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
         vwr = venue_win_rates.loc[venue_code] if venue_in_index else None
 
         for lane in range(1, 7):
-            win = int(race["result_1st"] == lane) if not pd.isna(race["result_1st"]) else 0
-            place = (
-                int(
-                    race["result_1st"] == lane
-                    or race["result_2nd"] == lane
-                    or race["result_3rd"] == lane
-                )
-                if not pd.isna(race["result_1st"])
-                else 0
+            r1 = race["result_1st"]
+            r2 = race["result_2nd"]
+            r3 = race["result_3rd"]
+            win = int(r1 == lane) if not pd.isna(r1) else 0
+            place = int(
+                (not pd.isna(r1) and r1 == lane)
+                or (not pd.isna(r2) and r2 == lane)
+                or (not pd.isna(r3) and r3 == lane)
             )
 
             lane_win_rate = vwr[f"lane_{lane}_win_rate"] if vwr is not None else 1 / 6

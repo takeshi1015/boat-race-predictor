@@ -91,6 +91,11 @@ def save_models(models: dict, model_dir: str = MODEL_DIR) -> None:
 
 
 def load_models(model_dir: str = MODEL_DIR) -> dict:
+    """Load all pickled models from model_dir.
+
+    Note: Only load models from a trusted, access-controlled directory.
+    Pickle deserialization can execute arbitrary code if the files are tampered with.
+    """
     models = {}
     for fname in os.listdir(model_dir):
         if fname.endswith(".pkl"):

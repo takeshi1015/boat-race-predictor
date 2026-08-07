@@ -207,14 +207,19 @@ def api_predict():
     if not _models:
         try:
             _models = load_models()
-        except FileNotFoundError as exc:
-            return jsonify({"error": str(exc)})
+        except FileNotFoundError:
+            return jsonify({"error": "モデルが見つかりません。先に src/train_models.py を実行してください。"})
 
     try:
         venue_code = int(request.args.get("venue_code", 12))
         race_number = int(request.args.get("race_number", 1))
     except ValueError:
         return jsonify({"error": "パラメータが不正です"})
+
+    if not (1 <= venue_code <= 24):
+        return jsonify({"error": "venue_code は 1〜24 の範囲で指定してください"})
+    if not (1 <= race_number <= 12):
+        return jsonify({"error": "race_number は 1〜12 の範囲で指定してください"})
 
     preds = predict_race(_models, venue_code, race_number)
     return jsonify({
