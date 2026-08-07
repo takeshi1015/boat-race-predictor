@@ -40,42 +40,32 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["venue_code", "race_number", "result_1st", "result_2nd", "result_3rd"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    df = df.dropna(subset=["result_1st", "result_2nd", "result_3rd"])
+    df = df.dropna(subset=["result_1st", "result_2nd", "result_3rd"]).reset_index(drop=True)
 
-    # 各レースについて 6 艇分の行を展開する
-    rows = []
-    for _, race in df.iterrows():
-        for boat_no in range(1, 7):
-            win = int(race["result_1st"] == boat_no)
-            place = int(race["result_1st"] == boat_no or race["result_2nd"] == boat_no)
-            rows.append(
-                {
-                    "date": race.get("date", ""),
-                    "venue_code": race["venue_code"],
-                    "race_number": race["race_number"],
-                    "boat_number": boat_no,
-                    "course_advantage": COURSE_ADVANTAGE.get(boat_no, 0.05),
-                    "is_inner_course": int(boat_no <= 2),
-                    "boat_number_norm": boat_no / 6.0,
-                    "venue_code_norm": race["venue_code"] / 24.0,
-                    "race_number_norm": race["race_number"] / 12.0,
-                    "win": win,
-                    "place": place,
-                }
-            )
+    # 各レースを 6 艇分に展開（ベクトル化）
+    n_races = len(df)
+    boat_numbers = np.tile(np.arange(1, 7), n_races)  # [1,2,3,4,5,6,1,2,...] length n_races*6
 
-    features_df = pd.DataFrame(rows)
+    repeated = df.loc[df.index.repeat(6)].reset_index(drop=True)
+    repeated["boat_number"] = boat_numbers
+
+    repeated["win"] = (repeated["result_1st"] == repeated["boat_number"]).astype(int)
+    repeated["place"] = (
+        (repeated["result_1st"] == repeated["boat_number"]) |
+        (repeated["result_2nd"] == repeated["boat_number"])
+    ).astype(int)
+
+    repeated["course_advantage"] = repeated["boat_number"].map(COURSE_ADVANTAGE).fillna(0.05)
+    repeated["is_inner_course"] = (repeated["boat_number"] <= 2).astype(int)
+    repeated["boat_number_norm"] = repeated["boat_number"] / 6.0
+    repeated["venue_code_norm"] = repeated["venue_code"] / 24.0
+    repeated["race_number_norm"] = repeated["race_number"] / 12.0
 
     # 会場・艇番ごとの過去勝率を特徴量として追加
-    win_rate = (
-        features_df.groupby(["venue_code", "boat_number"])["win"]
-        .transform("mean")
-        .rename("historical_win_rate")
-    )
-    features_df["historical_win_rate"] = win_rate
+    repeated["historical_win_rate"] = repeated.groupby(["venue_code", "boat_number"])["win"].transform("mean")
 
-    logger.info("特徴量生成完了: %d 行 x %d 列", len(features_df), len(features_df.columns))
-    return features_df
+    logger.info("特徴量生成完了: %d 行 x %d 列", len(repeated), len(repeated.columns))
+    return repeated
 
 
 def get_feature_columns() -> list[str]:

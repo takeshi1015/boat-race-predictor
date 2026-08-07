@@ -66,7 +66,7 @@ class BoatraceScraperOptimized:
         if not self.races:
             logger.warning("収集件数: 0  (サイト構造の変更 or ネットワーク制限の可能性)")
             # ダミーデータで CSV を生成してフローを継続させる
-            df = self._generate_dummy_data()
+            df = self._generate_dummy_data(days_back=days_back)
         else:
             df = pd.DataFrame(self.races)
             df = df.drop_duplicates(subset=["date", "venue_code", "race_number"])
@@ -151,7 +151,7 @@ class BoatraceScraperOptimized:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _generate_dummy_data(n_records: int = 600) -> pd.DataFrame:
+    def _generate_dummy_data(n_records: int = 600, days_back: int = 50) -> pd.DataFrame:
         """スクレイピングできなかった場合の代替データ。"""
         import random
 
@@ -159,7 +159,7 @@ class BoatraceScraperOptimized:
         rows = []
         now = datetime.now()
         for i in range(n_records):
-            d = now - timedelta(days=random.randint(0, 49))
+            d = now - timedelta(days=random.randint(0, days_back - 1))
             rows.append(
                 {
                     "date": d.strftime("%Y-%m-%d"),

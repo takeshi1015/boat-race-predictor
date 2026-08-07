@@ -20,6 +20,20 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# Predictor is loaded once at startup to avoid re-reading model files on every request.
+_predictor = None
+
+
+def _get_predictor():
+    global _predictor  # noqa: PLW0603
+    if _predictor is None:
+        try:
+            from predictor import BoatracePredictor  # noqa: PLC0415
+            _predictor = BoatracePredictor()
+        except Exception as exc:
+            logger.warning("予測モデルのロード失敗: %s", exc)
+    return _predictor
+
 # ------------------------------------------------------------------
 # HTMLテンプレート（外部ファイル不要でスタンドアロン動作）
 # ------------------------------------------------------------------
@@ -193,28 +207,30 @@ def api_stats():
 def api_predict():
     """1レースの予想を返す。"""
     try:
-        from predictor import BoatracePredictor  # noqa: PLC0415
         venue = int(request.args.get("venue", 3))
         race = int(request.args.get("race", 1))
-        predictor = BoatracePredictor()
+        predictor = _get_predictor()
+        if predictor is None:
+            return jsonify({"error": "モデルが利用できません"}), 503
         result = predictor.predict_race(venue, race)
         return jsonify(result)
     except Exception as exc:
         logger.error("predict error: %s", exc)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "予想処理に失敗しました"}), 500
 
 
 @app.route("/api/today")
 def api_today():
     """全24会場の第1レース予想を返す。"""
     try:
-        from predictor import BoatracePredictor  # noqa: PLC0415
-        predictor = BoatracePredictor()
+        predictor = _get_predictor()
+        if predictor is None:
+            return jsonify({"error": "モデルが利用できません"}), 503
         results = [predictor.predict_race(v, 1) for v in range(1, 25)]
         return jsonify(results)
     except Exception as exc:
         logger.error("today error: %s", exc)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "本日の予想取得に失敗しました"}), 500
 
 
 # ------------------------------------------------------------------
