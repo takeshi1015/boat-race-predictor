@@ -7,6 +7,7 @@ import sys
 import os
 import random
 from datetime import datetime, timedelta
+from itertools import permutations
 
 # プロジェクトルートをパスに追加
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,15 +28,9 @@ WEATHERS = ["sunny", "cloudy", "rainy"]
 WATER_CONDITIONS = ["calm", "slight", "moderate"]
 WEATHER_WEIGHT = [0.5, 0.35, 0.15]
 
-# 買い目パターン（全6パターン）
-ALL_PATTERNS = [
-    [1, 2, 3],
-    [1, 3, 2],
-    [2, 1, 3],
-    [2, 3, 1],
-    [3, 1, 2],
-    [3, 2, 1],
-]
+# 全120通りの3連単
+BOATS = [1, 2, 3, 4, 5, 6]
+ALL_ORDERS = [list(p) for p in permutations(BOATS, 3)]
 
 
 def _random_race_id(date: datetime, venue: str, race_number: int) -> str:
@@ -65,22 +60,41 @@ def _make_race(date: datetime, venue: str, race_number: int, hour: int) -> dict:
     }
 
 
-def _make_prediction_order(weather: str, water_condition: str) -> list:
-    """買い目を生成（多様性確保）"""
-    if weather == "rainy":
-        weights = [10, 10, 15, 15, 20, 20]
-    elif weather == "sunny":
-        weights = [25, 20, 15, 10, 15, 15]
-    else:
-        weights = [16, 17, 17, 17, 17, 16]
+def _predict_boat_order(weather: str, water_condition: str, confidence: float) -> list:
+    """
+    天気・水面・信頼度に基づいて3連単を予想
+    高信頼度：1号艇が絡む確率が高い
+    低信頼度（穴狙い）：どの艇でも等確率
+    """
+    if confidence >= 0.75:
+        # 高信頼度：1号艇が1着の可能性が高い
+        first_boat = 1
+        remaining = [2, 3, 4, 5, 6]
+        if weather == "rainy":
+            # 雨天は波乱含み、内外艇の混在
+            second_third = random.sample(remaining, 2)
+        else:
+            # 晴天・曇りは内側寄り
+            second_third = random.sample([2, 3, 4], min(2, len([2, 3, 4]))) if len([2, 3, 4]) >= 2 else random.sample(remaining, 2)
+        return [first_boat] + second_third
     
-    selected = random.choices(ALL_PATTERNS, weights=weights, k=1)[0]
-    return selected
+    elif confidence >= 0.60:
+        # 中信頼度：1,2号艇が上位の確率
+        if random.random() < 0.6:
+            first_boat = 1
+        else:
+            first_boat = 2
+        remaining = [b for b in BOATS if b != first_boat]
+        second_third = random.sample(remaining, 2)
+        return [first_boat] + second_third
+    
+    else:
+        # 低信頼度（穴狙い）：全120通りから等確率で選択
+        return random.choice(ALL_ORDERS)
 
 
 def _make_prediction(race_id: str, date: datetime, race_weather: str, race_water: str, hour: int) -> dict:
-    """予測データを生成（多様性確保）"""
-    predicted_order = _make_prediction_order(race_weather, race_water)
+    """予測データを生成"""
     
     # 信頼度を生成（50%～95%全範囲）
     base = 0.50
@@ -112,9 +126,10 @@ def _make_prediction(race_id: str, date: datetime, race_weather: str, race_water
     confidence = base + random.uniform(-0.30, 0.30)
     confidence = min(max(confidence, 0.50), 0.95)
     
-    is_hit = random.random() < 0.55
+    # 信頼度に基づいて3連単を予想
+    predicted_order = _predict_boat_order(race_weather, race_water, confidence)
     
-    # 実際のオッズはランダムに生成（テスト用シミュレーションデータ）
+    is_hit = random.random() < 0.55
     actual_odds = round(random.uniform(5.0, 50.0), 1) if is_hit else 0.0
     
     return {
@@ -134,7 +149,7 @@ def _make_prediction(race_id: str, date: datetime, race_weather: str, race_water
 
 
 def create_today_races(session, db, target_date: datetime, num_races: int = 10, create_predictions: bool = False) -> list:
-    """当日のレー��データを作成（全24場から10場をランダム選択、現在時刻より30分以上後のレースのみ）"""
+    """当日のレースデータを作成（全24場から10場をランダム選択、現在時刻より30分以上後のレースのみ）"""
     now = datetime.now()
     
     # 全24場からランダムに選択
