@@ -71,6 +71,36 @@ def test_api_models_info(client):
     assert "models" in data
 
 
+def test_api_races_today_returns_predictions(client, monkeypatch):
+    """GET /api/races/today should return date/count/predictions payload."""
+    sample_predictions = [
+        {
+            "race_id": "20260808_桐生_01",
+            "date": "2026-08-08T09:30:00",
+            "place": "桐生",
+            "venue": "桐生",
+            "race_number": 1,
+            "predicted_order": [1, 2, 3],
+            "confidence": 0.82,
+            "race_time": "09:30",
+            "purchase_deadline": "09:25",
+            "purchase_deadline_iso": "2026-08-08T09:25:00",
+            "is_purchasable": True,
+            "time_remaining": 1200,
+        }
+    ]
+
+    from models.ensemble_model import EnsembleModel
+    monkeypatch.setattr(EnsembleModel, "predict_today", lambda self: sample_predictions)
+
+    response = client.get("/api/races/today")
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert "date" in data
+    assert data["count"] == 1
+    assert data["predictions"][0]["race_time"] == "09:30"
+
+
 def test_export_json(client):
     """GET /api/predictions/export/json should trigger a JSON file download."""
     response = client.get("/api/predictions/export/json")
