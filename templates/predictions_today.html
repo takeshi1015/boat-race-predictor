@@ -15,6 +15,16 @@
   </div>
 </div>
 
+<!-- 統計情報 -->
+<div class="row mb-4">
+  <div class="col-md-6">
+    <div class="alert alert-info">
+      <strong>📊 統計情報</strong><br>
+      購入可能: <span id="available-count">-</span>件 | 終了: <span id="expired-count">-</span>件
+    </div>
+  </div>
+</div>
+
 <!-- 高信頼度予想（80%以上）-->
 <div class="mb-5">
   <h3 class="fw-bold text-success mb-3">
@@ -37,6 +47,18 @@
     <div class="col-12 text-center py-5 text-muted">
       <div class="spinner-border" role="status"></div>
       <p class="mt-2">読み込み中…</p>
+    </div>
+  </div>
+</div>
+
+<!-- 終了したレース（結果確認用）-->
+<div class="mb-5">
+  <h3 class="fw-bold text-secondary mb-3">
+    <i class="bi bi-clock-history me-2"></i>📋 過去レース結果
+  </h3>
+  <div id="expired-cards" class="row g-3">
+    <div class="col-12 text-center py-3 text-muted">
+      <p class="mb-0">終了したレースはありません</p>
     </div>
   </div>
 </div>
@@ -136,12 +158,64 @@ function createRaceCard(pred, category) {
   return card;
 }
 
+function createExpiredRaceCard(pred) {
+  const order = (pred.predicted_order || []).join("-") || "-";
+  const conf = pred.confidence || 0;
+  const confPct = (conf * 100).toFixed(1);
+  
+  const raceTime = pred.race_time || "?";
+  const deadline = pred.purchase_deadline || "?";
+  
+  const card = document.createElement("div");
+  card.className = "col-md-6 col-lg-4";
+  
+  card.innerHTML = `
+    <div class="card shadow-sm h-100 expired-result">
+      <div class="card-header d-flex justify-content-between align-items-center" style="background-color: #f5f5f5">
+        <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
+        <span class="badge bg-secondary">${pred.race_number}レース</span>
+      </div>
+      <div class="card-body">
+        <!-- レース時刻 -->
+        <div class="race-time mb-3" style="font-size: 13px; line-height: 1.8;">
+          <div style="color: #666;">
+            <i class="bi bi-clock text-info"></i> ⏰ レース時刻: <strong style="color: #000;">${raceTime}</strong>
+          </div>
+          <div style="color: #999;">購入制限: ${deadline}（終了）</div>
+        </div>
+        
+        <!-- 予想した買い目 -->
+        <div class="text-center mb-3">
+          <span class="display-6 fw-bold text-secondary">${order}</span>
+          <p class="text-muted small mb-0">予想した買い目</p>
+        </div>
+        
+        <!-- 信頼度 -->
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="text-muted small">信頼度:</span>
+          <span class="text-warning">${starsHtml(conf)}</span>
+          <span class="fw-bold">${confPct}%</span>
+        </div>
+        
+        <!-- 結果（学習用） -->
+        <div class="alert alert-secondary small mb-0" style="font-size: 12px;">
+          <i class="bi bi-info-circle me-1"></i>
+          このレースは既に終了しました。実績から学習していません。
+        </div>
+      </div>
+    </div>`;
+  
+  return card;
+}
+
 async function loadPredictions() {
   const highConfContainer = document.getElementById("high-confidence-cards");
   const highOddsContainer = document.getElementById("high-odds-cards");
+  const expiredContainer = document.getElementById("expired-cards");
   
   highConfContainer.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
   highOddsContainer.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
+  expiredContainer.innerHTML = `<div class="col-12 text-center py-3 text-muted"><p class="mb-0">読み込み中…</p></div>`;
 
   try {
     const res = await fetch("/api/races/today");
@@ -152,26 +226,35 @@ async function loadPredictions() {
 
     const predictions = data.predictions || [];
     
-    // 高信頼度（80%以上）
-    const highConf = predictions.filter(p => p.confidence >= 0.80);
+    // 購入可能なレース（80%以上）
+    const highConf = predictions.filter(p => p.confidence >= 0.80 && p.is_purchasable);
     
-    // 穴狙い（50-70%、高信頼度と重複なし）
+    // 購入可能な穴狙い（50-70%、高信頼度と重複なし）
     const usedVenues = new Set(highConf.map(p => p.place || p.venue));
     const highOdds = predictions.filter(p => 
       p.confidence >= 0.50 && 
       p.confidence < 0.80 &&
+      p.is_purchasable &&
       !(usedVenues.has(p.place || p.venue))
     );
+    
+    // 終了したレース（学習用）
+    const expired = predictions.filter(p => !p.is_purchasable);
+    
+    // 統計情報を更新
+    document.getElementById("available-count").textContent = highConf.length + highOdds.length;
+    document.getElementById("expired-count").textContent = expired.length;
 
-    if (highConf.length === 0 && highOdds.length === 0) {
+    if (highConf.length === 0 && highOdds.length === 0 && expired.length === 0) {
       highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-warning">当日のレースデータがありません</div></div>`;
       highOddsContainer.innerHTML = "";
+      expiredContainer.innerHTML = "";
       return;
     }
 
     // 高信頼度を表示
     if (highConf.length === 0) {
-      highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">該当する予想がありません</div></div>`;
+      highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">購入可能な高信頼度予想がありません</div></div>`;
     } else {
       highConfContainer.innerHTML = "";
       highConf.forEach(pred => {
@@ -181,11 +264,21 @@ async function loadPredictions() {
 
     // 穴狙いを表示
     if (highOdds.length === 0) {
-      highOddsContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">該当する予想がありません</div></div>`;
+      highOddsContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">購入可能な穴狙い予想がありません</div></div>`;
     } else {
       highOddsContainer.innerHTML = "";
       highOdds.forEach(pred => {
         highOddsContainer.appendChild(createRaceCard(pred, "high_odds"));
+      });
+    }
+
+    // 終了したレースを表示（学習用）
+    if (expired.length === 0) {
+      expiredContainer.innerHTML = `<div class="col-12 text-center py-3 text-muted"><p class="mb-0">終了したレースはありません</p></div>`;
+    } else {
+      expiredContainer.innerHTML = "";
+      expired.forEach(pred => {
+        expiredContainer.appendChild(createExpiredRaceCard(pred));
       });
     }
 
