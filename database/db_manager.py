@@ -14,7 +14,8 @@ import config
 from utils.logger import logger
 from database.models import (
     Base, Player, Boat, Race, Prediction,
-    ModelPerformance, LearningFeedback, Notification
+    ModelPerformance, LearningFeedback, Notification,
+    RaceEntry, RaceResult,
 )
 
 
@@ -270,6 +271,63 @@ class DatabaseManager:
         """Close database connection"""
         self.engine.dispose()
         logger.info("Database connection closed")
+
+    # ============================================================================
+    # RaceEntry Operations
+    # ============================================================================
+
+    def save_race_entries(self, session: Session, race_id: str, entries: list) -> int:
+        """Save race entries (6 boats) for a race"""
+        saved = 0
+        for entry_data in entries:
+            existing = session.query(RaceEntry).filter_by(
+                race_id=race_id,
+                frame_number=entry_data.get("frame_number"),
+            ).first()
+            if existing:
+                for key, value in entry_data.items():
+                    if hasattr(existing, key):
+                        setattr(existing, key, value)
+                existing.updated_at = datetime.now()
+            else:
+                entry = RaceEntry(race_id=race_id, **entry_data)
+                session.add(entry)
+            saved += 1
+        session.commit()
+        return saved
+
+    def get_race_entries(self, session: Session, race_id: str) -> list:
+        """Get all entries for a race, ordered by frame number"""
+        return (
+            session.query(RaceEntry)
+            .filter_by(race_id=race_id)
+            .order_by(RaceEntry.frame_number)
+            .all()
+        )
+
+    # ============================================================================
+    # RaceResult Operations
+    # ============================================================================
+
+    def save_race_result(self, session: Session, result_data: dict) -> RaceResult:
+        """Save or update the actual result for a race"""
+        race_id = result_data["race_id"]
+        existing = session.query(RaceResult).filter_by(race_id=race_id).first()
+        if existing:
+            for key, value in result_data.items():
+                if hasattr(existing, key):
+                    setattr(existing, key, value)
+            existing.updated_at = datetime.now()
+            session.commit()
+            return existing
+        result = RaceResult(**result_data)
+        session.add(result)
+        session.commit()
+        return result
+
+    def get_race_result(self, session: Session, race_id: str) -> Optional[RaceResult]:
+        """Get the actual result for a race"""
+        return session.query(RaceResult).filter_by(race_id=race_id).first()
 
 
 # Global database manager instance

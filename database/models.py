@@ -150,6 +150,65 @@ class ModelPerformance(Base):
     __table_args__ = {"comment": "モデル性能追跡"}
 
 
+class RaceEntry(Base):
+    """Race entry (one row per boat per race) table"""
+    __tablename__ = "race_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    race_id = Column(String, index=True)
+    frame_number = Column(Integer)        # 1～6号艇
+
+    # 選手情報
+    player_name = Column(String)
+    player_id = Column(String, index=True)
+    rank = Column(String)                 # A1, A2, B1, B2
+    wins_rate = Column(Float, default=0.0)    # 勝率
+    place_rate = Column(Float, default=0.0)   # 連対率
+    avg_start_timing = Column(Float, default=0.0)  # スタート差（秒）
+    recent_results = Column(JSON)         # 直近5走 ["1","2","3","1","2"]
+
+    # 艇・エンジン情報
+    boat_number = Column(String)
+    boat_wins_rate = Column(Float, default=0.0)   # 使用艇の勝率
+    engine_number = Column(String)
+    engine_wins_rate = Column(Float, default=0.0) # 使用エンジンの勝率
+    exhibition_time = Column(Float, default=0.0)  # 展示タイム（秒）
+
+    # Metadata
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = {"comment": "レースエントリー（出走艇）"}
+
+
+class RaceResult(Base):
+    """Actual race result table"""
+    __tablename__ = "race_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    race_id = Column(String, unique=True, index=True)
+
+    # 着順
+    first_place = Column(Integer)         # 1着艇番号
+    second_place = Column(Integer)        # 2着艇番号
+    third_place = Column(Integer)         # 3着艇番号
+
+    # 配当（100円当たり）
+    payoff_win = Column(Integer)          # 単勝配当
+    payoff_place_1 = Column(Integer)      # 複勝1着配当
+    payoff_place_2 = Column(Integer)      # 複勝2着配当
+    payoff_exacta = Column(Integer)       # 2連単配当
+    payoff_quinella = Column(Integer)     # 2連複配当
+    payoff_trifecta = Column(Integer)     # 3連単配当
+    payoff_trio = Column(Integer)         # 3連複配当
+
+    # Metadata
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = {"comment": "レース実結果・配当"}
+
+
 class LearningFeedback(Base):
     """Learning feedback table for reinforcement learning"""
     __tablename__ = "learning_feedback"
