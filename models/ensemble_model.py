@@ -102,6 +102,30 @@ def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -
     return confidence
 
 
+def _estimate_odds(predicted_order: list, confidence: float, weather: str) -> float:
+    """推定オッズを計算"""
+    if predicted_order and predicted_order[0] == 1 and weather != "rainy":
+        # 1号艇1着の本命予想 → 低～中オッズ
+        base_odds = max(2.0, 12.0 - confidence * 10.0)
+    else:
+        # 穴狙い予想 → 高オッズ
+        base_odds = max(10.0, 50.0 - confidence * 30.0)
+    return round(base_odds + random.uniform(-1.0, 1.0), 1)
+
+
+def _upset_score(predicted_order: list, weather: str, water_condition: str, confidence: float) -> float:
+    """穴狙いスコアを計算（高いほど穴狙い向き）"""
+    score = 0.0
+    if predicted_order and predicted_order[0] != 1:
+        score += 0.40  # 1号艇以外が1着予想
+    if weather == "rainy":
+        score += 0.25
+    if water_condition in ("moderate", "rough"):
+        score += 0.15
+    score += (1.0 - confidence) * 0.20  # 不確実性が高いほど穴度アップ
+    return min(round(score, 3), 1.0)
+
+
 def _is_race_purchasable(race_datetime: datetime) -> bool:
     """レースが現在購入可能か判定
     
@@ -137,6 +161,41 @@ class EnsembleModel:
         """翌日の予測を実行"""
         logger.info("翌日予測を開始")
         return self._predict_for_period("tomorrow")
+
+    def predict_categorized(self, period: str = "tomorrow") -> dict:
+        """カテゴリー別予測を実行
+
+        Returns:
+            {
+                "high_confidence": [...],  # 信頼度0.8以上 TOP 5
+                "high_odds": [...],        # 穴狙い予想 TOP 5
+            }
+        """
+        all_preds = self._predict_for_period(period)
+
+        # 確実性の高い予想: 信頼度0.8以上、信頼度降順 TOP 5
+        high_confidence = sorted(
+            [p for p in all_preds if p.get("confidence", 0) >= 0.8],
+            key=lambda x: x.get("confidence", 0),
+            reverse=True,
+        )[:config.HIGH_CONFIDENCE_RACES]
+
+        # 穴狙い予想: upset_score 降順 TOP 5（高信頼度と重複しない）
+        high_conf_ids = {p["race_id"] for p in high_confidence}
+        upset_candidates = sorted(
+            [p for p in all_preds if p["race_id"] not in high_conf_ids],
+            key=lambda x: x.get("upset_score", 0),
+            reverse=True,
+        )[:config.HIGH_ODDS_RACES]
+
+        logger.info(
+            f"カテゴリー別予測完了 [{period}]: "
+            f"高信頼度={len(high_confidence)}件, 穴狙い={len(upset_candidates)}件"
+        )
+        return {
+            "high_confidence": high_confidence,
+            "high_odds": upset_candidates,
+        }
 
     def _predict_for_period(self, period: str) -> list:
         """指定期間のレースを予測"""
@@ -199,6 +258,8 @@ class EnsembleModel:
 
             predicted_order = _make_prediction_order(weather, water_cond)
             confidence = _confidence_from_conditions(weather, water_cond, hour)
+            estimated_odds = _estimate_odds(predicted_order, confidence, weather)
+            upset = _upset_score(predicted_order, weather, water_cond, confidence)
 
             reason = _WEATHER_REASONS.get(weather, "")
             water_reason = _WATER_REASONS.get(water_cond, "")
@@ -232,7 +293,10 @@ class EnsembleModel:
                 "venue": place,
                 "race_number": race_number,
                 "predicted_order": predicted_order,
+                "prediction": predicted_order,  # email notifier との互換性
                 "confidence": round(confidence, 2),
+                "estimated_odds": estimated_odds,
+                "upset_score": upset,
                 "reason": reason,
                 "timestamp": datetime.now().isoformat(),
                 "race_time": race_time_str,

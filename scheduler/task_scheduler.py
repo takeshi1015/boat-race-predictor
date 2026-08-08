@@ -22,11 +22,46 @@ def _buy_label(confidence: float) -> str:
     return "購入可能" if confidence >= 0.7 else "参考情報"
 
 
+def _format_pred_row(pred: dict, width: int = 44) -> None:
+    """1件の予測をボックス形式で出力"""
+    place = pred.get("place") or pred.get("venue", "不明")
+    race_number = pred.get("race_number", "?")
+    predicted_order = pred.get("predicted_order") or pred.get("prediction", [])
+    confidence = float(pred.get("confidence", 0.0))
+    reason = pred.get("reason", "")
+    odds = pred.get("estimated_odds")
+
+    if isinstance(predicted_order, list) and predicted_order:
+        buy_pattern = "-".join(str(x) for x in predicted_order[:3])
+    elif isinstance(predicted_order, dict):
+        sorted_keys = sorted(predicted_order, key=lambda k: predicted_order[k], reverse=True)
+        buy_pattern = "-".join(str(k) for k in sorted_keys[:3])
+    else:
+        buy_pattern = "不明"
+
+    header_info = f"─ {place}競艇場 {race_number}レース "
+    border_top = "┌" + header_info + "─" * max(1, width - len(header_info) - 1) + "┐"
+    border_bot = "└" + "─" * (width + 2) + "┘"
+
+    print(border_top)
+    print(f"│ 推奨買い目: {buy_pattern:<34}│")
+    stars_str = _stars(confidence)
+    label = _buy_label(confidence)
+    conf_str = f"{stars_str} {confidence:.2f} ({label})"
+    print(f"│ 信頼度: {conf_str:<36}│")
+    if odds is not None:
+        print(f"│ 推定オッズ: {odds:.1f}倍{'':<36}│")
+    if reason:
+        print(f"│ 理由: {reason:<38}│")
+    print(border_bot)
+    print()
+
+
 def _display_predictions(predictions: list, title: str, target_date: datetime = None) -> None:
     """予測結果をCLI形式で表示"""
     if target_date is None:
         target_date = datetime.now()
-    
+
     date_str = target_date.strftime("%Y-%m-%d")
     print()
     print("━" * 50)
@@ -43,35 +78,55 @@ def _display_predictions(predictions: list, title: str, target_date: datetime = 
         return
 
     for pred in predictions:
-        place = pred.get("place") or pred.get("venue", "不明")
-        race_number = pred.get("race_number", "?")
-        predicted_order = pred.get("predicted_order") or pred.get("prediction", [])
-        confidence = float(pred.get("confidence", 0.0))
-        reason = pred.get("reason", "")
+        _format_pred_row(pred)
 
-        # 買い目を "1-2-3" 形式に
-        if isinstance(predicted_order, list) and predicted_order:
-            buy_pattern = "-".join(str(x) for x in predicted_order[:3])
-        elif isinstance(predicted_order, dict):
-            # {1: prob, 2: prob, 3: prob} 形式
-            sorted_keys = sorted(predicted_order, key=lambda k: predicted_order[k], reverse=True)
-            buy_pattern = "-".join(str(k) for k in sorted_keys[:3])
-        else:
-            buy_pattern = "不明"
 
-        width = 44
-        border_top = f"┌─ {place}競艇場 {race_number}レース " + "─" * max(1, width - len(f"─ {place}競艇場 {race_number}レース ") - 1) + "┐"
-        border_bot = "└" + "─" * (width + 2) + "┘"
+def _display_categorized_predictions(
+    high_confidence: list,
+    high_odds: list,
+    title: str,
+    target_date: datetime = None,
+    hit_rate: float = None,
+) -> None:
+    """カテゴリー別予測をCLI形式で表示"""
+    if target_date is None:
+        target_date = datetime.now()
 
-        print(border_top)
-        print(f"│ 推奨買い目: {buy_pattern:<34}│")
-        stars_str = _stars(confidence)
-        label = _buy_label(confidence)
-        conf_str = f"{stars_str} {confidence:.2f} ({label})"
-        print(f"│ 信頼度: {conf_str:<36}│")
-        if reason:
-            print(f"│ 理由: {reason:<38}│")
-        print(border_bot)
+    date_str = target_date.strftime("%Y-%m-%d")
+    print()
+    print("━" * 50)
+    print("ボートレース予測システム v1.0")
+    print("━" * 50)
+    print()
+    print(f"【{title}】 {date_str}")
+    print()
+
+    if not high_confidence and not high_odds:
+        print("  予測データがありません。")
+        print("  python scripts/init_test_data.py でテストデータを追加してください。")
+        print()
+        return
+
+    if high_confidence:
+        print(f"🎯 確実性の高い予想 TOP {len(high_confidence)}")
+        print("-" * 50)
+        for pred in high_confidence:
+            _format_pred_row(pred)
+    else:
+        print("🎯 確実性の高い予想: 該当なし（信頼度0.8以上のレースがありません）")
+        print()
+
+    if high_odds:
+        print(f"💰 穴狙い予想 TOP {len(high_odds)}")
+        print("-" * 50)
+        for pred in high_odds:
+            _format_pred_row(pred)
+    else:
+        print("💰 穴狙い予想: 該当なし")
+        print()
+
+    if hit_rate is not None:
+        print(f"📈 今月の成績: 的中率 {hit_rate:.1%} （過去30日平均）")
         print()
 
 
@@ -121,16 +176,19 @@ class TaskScheduler:
         logger.info("当日予測タスクを開始")
         try:
             today = datetime.now()
-            predictions = self._get_model().predict_today()
-            logger.info(f"当日予測完了: {len(predictions)}レース")
+            predictions_data = self._get_model().predict_categorized("today")
+            high_conf = predictions_data.get("high_confidence", [])
+            high_odds = predictions_data.get("high_odds", [])
 
-            high_confidence = [p for p in predictions if float(p.get("confidence", 0)) >= 0.7]
-            if high_confidence:
-                logger.info(f"信頼度0.7以上の予測: {len(high_confidence)}件")
-            else:
-                logger.info("信頼度0.7以上の予測はありません")
+            logger.info(f"当日予測完了: 高信頼度={len(high_conf)}件, 穴狙い={len(high_odds)}件")
 
-            _display_predictions(predictions, "当日予想", today)
+            # 的中率取得
+            hit_rate = self._get_hit_rate()
+
+            _display_categorized_predictions(high_conf, high_odds, "当日予想", today, hit_rate)
+
+            # メール送付
+            self._send_prediction_email(predictions_data, "today", hit_rate)
         except Exception as e:
             logger.error(f"当日予測エラー: {e}", exc_info=True)
             print(f"❌ 当日予測エラー: {e}")
@@ -142,20 +200,53 @@ class TaskScheduler:
         logger.info("翌日予測タスクを開始")
         try:
             tomorrow = datetime.now() + timedelta(days=1)
-            predictions = self._get_model().predict_tomorrow()
-            logger.info(f"翌日予測完了: {len(predictions)}レース")
+            predictions_data = self._get_model().predict_categorized("tomorrow")
+            high_conf = predictions_data.get("high_confidence", [])
+            high_odds = predictions_data.get("high_odds", [])
 
-            high_confidence = [p for p in predictions if float(p.get("confidence", 0)) >= 0.7]
-            if high_confidence:
-                logger.info(f"信頼度0.7以上の予測: {len(high_confidence)}件")
-            else:
-                logger.info("信頼度0.7以上の予測はありません")
+            logger.info(f"翌日予測完了: 高信頼度={len(high_conf)}件, 穴狙い={len(high_odds)}件")
 
-            _display_predictions(predictions, "翌日予想", tomorrow)
+            # 的中率取得
+            hit_rate = self._get_hit_rate()
+
+            _display_categorized_predictions(high_conf, high_odds, "翌日予想", tomorrow, hit_rate)
+
+            # メール送付
+            self._send_prediction_email(predictions_data, "tomorrow", hit_rate)
         except Exception as e:
             logger.error(f"翌日予測エラー: {e}", exc_info=True)
             print(f"❌ 翌日予測エラー: {e}")
         logger.info("=" * 60)
+
+    def _get_hit_rate(self) -> float:
+        """過去30日の的中率を取得"""
+        try:
+            from database.db_manager import get_db_manager
+            db = get_db_manager()
+            session = db.get_session()
+            try:
+                return db.calculate_hit_rate(session, days=30)
+            finally:
+                session.close()
+        except Exception:
+            return 0.0
+
+    def _send_prediction_email(self, predictions_data: dict, mode: str, hit_rate: float = 0.0) -> None:
+        """予測結果をメール送付"""
+        try:
+            from notifier.email_notifier import EmailNotifier
+            notifier = EmailNotifier()
+            label = "翌日" if mode == "tomorrow" else "当日"
+            subject = f"【ボートレース予測】{label}の推奨予想"
+            notifier.send_prediction_email(
+                subject=subject,
+                predictions=predictions_data,
+                mode=mode,
+                hit_rate=hit_rate,
+            )
+            logger.info(f"メール送付完了 [{mode}]")
+        except Exception as e:
+            logger.warning(f"メール送付スキップ: {e}")
 
     def _run_performance_analysis(self):
         """パフォーマンス分析を実行（main.py から呼び出し）"""
