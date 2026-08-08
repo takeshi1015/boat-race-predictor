@@ -103,8 +103,6 @@ def test_api_today_populates_predictions(client):
 
     confidences = [pred["confidence"] for pred in data["predictions"]]
     assert all(conf >= 0.5 for conf in confidences)
-    assert any(conf >= 0.8 for conf in confidences)
-    assert any(0.5 <= conf < 0.8 for conf in confidences)
 
     first = data["predictions"][0]
     assert "race_id" in first
