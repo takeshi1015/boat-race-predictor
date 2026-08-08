@@ -32,6 +32,13 @@ _WATER_REASONS = {
 RACE_TICKET_CUTOFF_MINUTES = 5
 
 
+def is_race_finished(race_datetime: datetime) -> bool:
+    """レースが終了済みか判定（開始時刻・購入締切時刻の両方を利用）"""
+    now = datetime.now()
+    cutoff_time = race_datetime - timedelta(minutes=RACE_TICKET_CUTOFF_MINUTES)
+    return now > race_datetime and now > cutoff_time
+
+
 def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -> float:
     """条件から信頼度スコアを算出"""
     base = 0.65
@@ -130,6 +137,7 @@ class EnsembleModel:
                     predictions.append(pred)
             
             logger.info(f"{period}予測完了: {len(predictions)}件")
+            self._store_predictions(predictions)
             return predictions
         except Exception as e:
             logger.error(f"{period}予測エラー: {e}", exc_info=True)
@@ -180,6 +188,9 @@ class EnsembleModel:
                 now = datetime.now()
                 is_purchasable = now <= deadline_dt
                 time_remaining = max(0, int((deadline_dt - now).total_seconds()))
+                is_finished = is_race_finished(date_val)
+            else:
+                is_finished = False
 
             return {
                 "race_id": getattr(race, "race_id", "unknown"),
@@ -196,9 +207,59 @@ class EnsembleModel:
                 "purchase_deadline_iso": purchase_deadline_iso,
                 "is_purchasable": is_purchasable,
                 "time_remaining": time_remaining,
+                "is_finished": is_finished,
+                "result": self._get_prediction_result(getattr(race, "race_id", "unknown")),
             }
         except Exception as e:
             logger.error(f"レース予測エラー: {e}")
+            return None
+
+    def _store_predictions(self, predictions: list) -> None:
+        """予測結果をDBに保存（同一race_idは最新値で更新）"""
+        if not predictions:
+            return
+
+        try:
+            from database.db_manager import get_db_manager
+            db = get_db_manager()
+            session = db.get_session()
+            try:
+                for pred in predictions:
+                    db.upsert_prediction_by_race_id(
+                        session=session,
+                        race_id=pred.get("race_id"),
+                        prediction_data={
+                            "prediction_date": datetime.now(),
+                            "prediction_type": "high_confidence" if pred.get("confidence", 0) >= 0.7 else "standard",
+                            "predicted_order": pred.get("predicted_order") or [],
+                            "confidence": float(pred.get("confidence", 0.0)),
+                            "estimated_odds": 0.0,
+                            "model_version": "ensemble-v1",
+                            "methods_used": ["ensemble"],
+                        },
+                    )
+            finally:
+                session.close()
+        except Exception as e:
+            logger.error(f"予測保存エラー: {e}", exc_info=True)
+
+    def _get_prediction_result(self, race_id: str):
+        """保存済みの予測結果を取得（未登録時はNone）"""
+        if not race_id or race_id == "unknown":
+            return None
+        try:
+            from database.db_manager import get_db_manager
+            from database.models import Prediction
+            db = get_db_manager()
+            session = db.get_session()
+            try:
+                prediction = session.query(Prediction).filter(
+                    Prediction.race_id == race_id
+                ).order_by(Prediction.prediction_date.desc()).first()
+                return prediction.result if prediction else None
+            finally:
+                session.close()
+        except Exception:
             return None
 
     def _get_race_data(self, period: str) -> list:

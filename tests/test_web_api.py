@@ -2,6 +2,7 @@
 
 import json
 import os
+from datetime import datetime
 import pytest
 
 from app import create_app
@@ -202,3 +203,48 @@ def test_run_all_models_demo_saves_all(output_dirs):
 
     assert os.path.exists(os.path.join(outputs_dir, "results.json"))
     assert os.path.exists(os.path.join(outputs_dir, "results.csv"))
+
+
+def test_submit_race_result_updates_prediction(client):
+    """POST /api/races/<race_id>/result should save actual result and return hit status."""
+    from database.db_manager import get_db_manager
+
+    db = get_db_manager()
+    session = db.get_session()
+    race_id = f"test-result-{datetime.now().timestamp()}"
+    try:
+        db.upsert_prediction_by_race_id(
+            session=session,
+            race_id=race_id,
+            prediction_data={
+                "prediction_date": datetime.now(),
+                "prediction_type": "standard",
+                "predicted_order": [1, 3, 5],
+                "confidence": 0.66,
+                "estimated_odds": 0.0,
+                "model_version": "test",
+                "methods_used": ["test"],
+            },
+        )
+    finally:
+        session.close()
+
+    response = client.post(
+        f"/api/races/{race_id}/result",
+        data=json.dumps({"actual_order": [1, 3, 5], "actual_odds": 12.3}),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["race_id"] == race_id
+    assert data["is_hit"] is True
+    assert data["confidence_assessment"] == "underestimated"
+
+
+def test_race_accuracy_endpoint_returns_groups(client):
+    """GET /api/races/accuracy should return grouped confidence metrics."""
+    response = client.get("/api/races/accuracy")
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert "accuracy_by_confidence" in data
+    assert "assessed_predictions" in data

@@ -15,33 +15,45 @@
   </div>
 </div>
 
-<!-- 高信頼度予想（80%以上）-->
-<div class="mb-5">
-  <h3 class="fw-bold text-success mb-3">
-    <i class="bi bi-check-circle-fill me-2"></i>✅ 確実性の高い予想 - 本命狙い
-  </h3>
-  <div id="high-confidence-cards" class="row g-3">
-    <div class="col-12 text-center py-5 text-muted">
-      <div class="spinner-border" role="status"></div>
-      <p class="mt-2">読み込み中…</p>
+<ul class="nav nav-tabs mb-3" role="tablist">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-upcoming" type="button">当日予想</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-past" type="button">過去予想</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-stats" type="button">統計</button></li>
+</ul>
+
+<div class="tab-content">
+  <div class="tab-pane fade show active" id="tab-upcoming">
+    <div class="mb-5">
+      <h3 class="fw-bold text-success mb-3"><i class="bi bi-check-circle-fill me-2"></i>✅ 確実性の高い予想 - 本命狙い</h3>
+      <div id="high-confidence-cards" class="row g-3"></div>
+    </div>
+
+    <div class="mb-4">
+      <h3 class="fw-bold text-warning mb-3"><i class="bi bi-bullseye me-2"></i>💰 穴確率が高い予想 - 配当狙い</h3>
+      <div id="high-odds-cards" class="row g-3"></div>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="tab-past">
+    <div id="past-races-cards" class="row g-3"></div>
+  </div>
+
+  <div class="tab-pane fade" id="tab-stats">
+    <div class="card">
+      <div class="card-body">
+        <div id="accuracy-summary" class="mb-3 text-muted">読み込み中…</div>
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr><th>信頼度帯</th><th>的中率</th><th>件数</th></tr></thead>
+            <tbody id="accuracy-table-body"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- 穴狙い予想（50-70%）-->
-<div class="mb-5">
-  <h3 class="fw-bold text-warning mb-3">
-    <i class="bi bi-bullseye me-2"></i>💰 穴確率が高い予想 - 配当狙い
-  </h3>
-  <div id="high-odds-cards" class="row g-3">
-    <div class="col-12 text-center py-5 text-muted">
-      <div class="spinner-border" role="status"></div>
-      <p class="mt-2">読み込み中…</p>
-    </div>
-  </div>
-</div>
-
-<p class="text-end text-muted small">最終更新: <span id="last-updated">-</span></p>
+<p class="text-end text-muted small mt-3">最終更新: <span id="last-updated">-</span></p>
 {% endblock %}
 
 {% block scripts_extra %}
@@ -62,159 +74,146 @@ function createRaceCard(pred, category) {
   const conf = pred.confidence || 0;
   const confPct = (conf * 100).toFixed(1);
   const isHighConfidence = category === "high_confidence";
-  
   const raceTime = pred.race_time || "?";
   const deadline = pred.purchase_deadline || "?";
   const deadlineIso = pred.purchase_deadline_iso || "";
   const timeRemaining = pred.time_remaining || 0;
   const isPurchasable = pred.is_purchasable;
-  
   const card = document.createElement("div");
   card.className = "col-md-6 col-lg-4";
-  
   const badgeBg = isHighConfidence ? "bg-success" : "bg-warning";
   const badgeText = isHighConfidence ? "【購入推奨】" : "【穴狙い】";
   const headerBg = isHighConfidence ? "#e8f5e9" : "#fff3e0";
-  
   const statusColor = isPurchasable ? "#4CAF50" : "#999";
   const statusText = isPurchasable ? "購入可能" : "購入終了";
-  
   card.innerHTML = `
-    <div class="card shadow-sm h-100 race-item ${isPurchasable ? 'available' : 'expired'}" 
-         data-deadline="${deadlineIso}">
+    <div class="card shadow-sm h-100 race-item ${isPurchasable ? 'available' : 'expired'}" data-deadline="${deadlineIso}">
       <div class="card-header d-flex justify-content-between align-items-center" style="background-color: ${headerBg}">
         <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
         <span class="badge bg-secondary">${pred.race_number}レース</span>
       </div>
       <div class="card-body">
-        <!-- レース時刻と購入制限 -->
         <div class="race-time mb-3" style="font-size: 13px; line-height: 1.8;">
-          <div style="color: #666;">
-            <i class="bi bi-clock text-info"></i> ⏰ レース時刻: <strong style="color: #000;">${raceTime}</strong>
-          </div>
-          <div style="color: #666;">
-            <i class="bi bi-x-circle text-danger"></i> 🚫 購入制限: <strong style="color: #000;">${deadline}</strong>
-          </div>
-          <div style="color: ${statusColor}; font-weight: bold; margin-top: 4px;">
-            ${statusText} 
-            <span class="time-remaining">${isPurchasable ? formatTimeRemaining(timeRemaining) : "終了"}</span>
-          </div>
+          <div style="color: #666;"><i class="bi bi-clock text-info"></i> ⏰ レース時刻: <strong style="color: #000;">${raceTime}</strong></div>
+          <div style="color: #666;"><i class="bi bi-x-circle text-danger"></i> 🚫 購入制限: <strong style="color: #000;">${deadline}</strong></div>
+          <div style="color: ${statusColor}; font-weight: bold; margin-top: 4px;">${statusText} <span class="time-remaining">${isPurchasable ? formatTimeRemaining(timeRemaining) : "終了"}</span></div>
         </div>
-        
-        <!-- 推奨買い目 -->
-        <div class="text-center mb-3">
-          <span class="display-6 fw-bold text-primary">${order}</span>
-          <p class="text-muted small mb-0">推奨買い目</p>
-        </div>
-        
-        <!-- 信頼度 -->
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <span class="text-muted small">信頼度</span>
-          <span class="badge ${badgeBg}">${badgeText}</span>
-        </div>
-        
-        <div class="d-flex align-items-center gap-2 mb-2">
-          <span class="text-warning">${starsHtml(conf)}</span>
-          <span class="fw-bold">${confPct}%</span>
-        </div>
-        
-        <div class="progress mb-3" style="height:8px">
-          <div class="progress-bar ${isHighConfidence ? 'bg-success' : 'bg-warning'}" 
-               style="width:${confPct}%"></div>
-        </div>
-        
-        <!-- 理由 -->
-        ${pred.reason ? `
-          <p class="text-muted small mb-0">
-            <i class="bi bi-info-circle me-1"></i>
-            ${isHighConfidence ? '◎ ' : '△ '}${pred.reason}
-          </p>
-        ` : ""}
+        <div class="text-center mb-3"><span class="display-6 fw-bold text-primary">${order}</span><p class="text-muted small mb-0">推奨買い目</p></div>
+        <div class="d-flex justify-content-between align-items-center mb-2"><span class="text-muted small">信頼度</span><span class="badge ${badgeBg}">${badgeText}</span></div>
+        <div class="d-flex align-items-center gap-2 mb-2"><span class="text-warning">${starsHtml(conf)}</span><span class="fw-bold">${confPct}%</span></div>
+        <div class="progress mb-3" style="height:8px"><div class="progress-bar ${isHighConfidence ? 'bg-success' : 'bg-warning'}" style="width:${confPct}%"></div></div>
       </div>
     </div>`;
-  
   return card;
+}
+
+function createPastRaceCard(pred) {
+  const card = document.createElement("div");
+  card.className = "col-md-6";
+  const order = (pred.predicted_order || []).join("-");
+  const result = pred.result;
+  const hitBadge = result ? (result.is_hit ? '<span class="badge bg-success">○ 的中</span>' : '<span class="badge bg-danger">× ハズレ</span>') : '<span class="badge bg-secondary">未入力</span>';
+  card.innerHTML = `
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex justify-content-between">
+        <span>${pred.place || pred.venue || "不明"} ${pred.race_number}R</span>${hitBadge}
+      </div>
+      <div class="card-body">
+        <p class="mb-1">予想: <strong>${order}</strong> / 信頼度 ${(pred.confidence * 100).toFixed(1)}%</p>
+        ${result ? `<p class="mb-2">実着順: ${(result.actual_order || []).join("-")} / 配当 ${result.actual_odds ?? "-"}</p>` : ""}
+        <form onsubmit="submitRaceResult(event, '${pred.race_id}')">
+          <div class="row g-2">
+            <div class="col-6"><input class="form-control form-control-sm" name="actual_order" placeholder="実着順 例:1,3,5" required></div>
+            <div class="col-3"><input class="form-control form-control-sm" name="actual_odds" type="number" step="0.1" placeholder="配当" required></div>
+            <div class="col-3 d-grid"><button class="btn btn-sm btn-primary" type="submit">結果を入力</button></div>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  return card;
+}
+
+async function submitRaceResult(event, raceId) {
+  event.preventDefault();
+  const form = event.target;
+  const actualOrder = (form.actual_order.value || "").split(",").map(v => parseInt(v.trim(), 10)).filter(v => Number.isInteger(v));
+  const actualOdds = parseFloat(form.actual_odds.value);
+  const res = await fetch(`/api/races/${raceId}/result`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({actual_order: actualOrder, actual_odds: actualOdds}),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || "結果入力に失敗しました");
+    return;
+  }
+  alert(data.is_hit ? "○ 的中しました" : "× ハズレでした");
+  await loadPredictions();
+}
+
+async function loadAccuracyStats() {
+  const summary = document.getElementById("accuracy-summary");
+  const tbody = document.getElementById("accuracy-table-body");
+  try {
+    const res = await fetch("/api/races/accuracy");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "取得失敗");
+    summary.textContent = `分析対象 ${data.assessed_predictions}件 / 過小評価 ${data.underestimated_count}件 / 過大評価 ${data.overestimated_count}件`;
+    tbody.innerHTML = "";
+    const groups = data.accuracy_by_confidence || {};
+    Object.keys(groups).forEach((k) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `<td>${k}</td><td>${(groups[k].accuracy * 100).toFixed(1)}%</td><td>${groups[k].sample_size}</td>`;
+      tbody.appendChild(row);
+    });
+    if (!tbody.children.length) {
+      tbody.innerHTML = `<tr><td colspan="3" class="text-muted">結果データがありません</td></tr>`;
+    }
+  } catch (e) {
+    summary.textContent = `統計取得エラー: ${e.message}`;
+  }
 }
 
 async function loadPredictions() {
   const highConfContainer = document.getElementById("high-confidence-cards");
   const highOddsContainer = document.getElementById("high-odds-cards");
-  
+  const pastContainer = document.getElementById("past-races-cards");
   highConfContainer.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
   highOddsContainer.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
+  pastContainer.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
 
   try {
     const res = await fetch("/api/races/today");
     const data = await res.json();
-
     document.getElementById("today-date").textContent = data.date || "";
     document.getElementById("last-updated").textContent = new Date().toLocaleString("ja-JP");
-
     const predictions = data.predictions || [];
-    
-    // 高信頼度（80%以上）
-    const highConf = predictions.filter(p => p.confidence >= 0.80);
-    
-    // 穴狙い（50-70%、高信頼度と重複なし）
+    const upcoming = predictions.filter(p => !p.is_finished);
+    const finished = predictions.filter(p => p.is_finished);
+    const highConf = upcoming.filter(p => p.confidence >= 0.80);
     const usedVenues = new Set(highConf.map(p => p.place || p.venue));
-    const highOdds = predictions.filter(p => 
-      p.confidence >= 0.50 && 
-      p.confidence < 0.80 &&
-      !(usedVenues.has(p.place || p.venue))
-    );
+    const highOdds = upcoming.filter(p => p.confidence >= 0.50 && p.confidence < 0.80 && !(usedVenues.has(p.place || p.venue)));
 
-    if (highConf.length === 0 && highOdds.length === 0) {
-      highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-warning">当日のレースデータがありません</div></div>`;
-      highOddsContainer.innerHTML = "";
-      return;
-    }
-
-    // 高信頼度を表示
-    if (highConf.length === 0) {
-      highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">該当する予想がありません</div></div>`;
-    } else {
-      highConfContainer.innerHTML = "";
-      highConf.forEach(pred => {
-        highConfContainer.appendChild(createRaceCard(pred, "high_confidence"));
-      });
-    }
-
-    // 穴狙いを表示
-    if (highOdds.length === 0) {
-      highOddsContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">該当する予想がありません</div></div>`;
-    } else {
-      highOddsContainer.innerHTML = "";
-      highOdds.forEach(pred => {
-        highOddsContainer.appendChild(createRaceCard(pred, "high_odds"));
-      });
-    }
-
+    highConfContainer.innerHTML = highConf.length ? "" : `<div class="col-12"><div class="alert alert-info">該当する予想がありません</div></div>`;
+    highConf.forEach(pred => highConfContainer.appendChild(createRaceCard(pred, "high_confidence")));
+    highOddsContainer.innerHTML = highOdds.length ? "" : `<div class="col-12"><div class="alert alert-info">該当する予想がありません</div></div>`;
+    highOdds.forEach(pred => highOddsContainer.appendChild(createRaceCard(pred, "high_odds")));
+    pastContainer.innerHTML = finished.length ? "" : `<div class="col-12"><div class="alert alert-info">終了済みレースがありません</div></div>`;
+    finished.forEach(pred => pastContainer.appendChild(createPastRaceCard(pred)));
+    await loadAccuracyStats();
   } catch (e) {
     highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-danger">データ読み込みエラー: ${e.message}</div></div>`;
-    console.error(e);
   }
 }
 
-// リアルタイムカウントダウン
 setInterval(() => {
   document.querySelectorAll(".race-item[data-deadline]").forEach((el) => {
     const deadline = el.dataset.deadline;
     if (!deadline) return;
-
-    const now = new Date();
-    const remaining = Math.max(0, (new Date(deadline) - now) / 1000);
-
-    // 残り時間テキストを更新
+    const remaining = Math.max(0, (new Date(deadline) - new Date()) / 1000);
     const timeEl = el.querySelector(".time-remaining");
-    if (timeEl) {
-      if (remaining <= 0) {
-        timeEl.textContent = "終了";
-      } else {
-        timeEl.textContent = formatTimeRemaining(remaining);
-      }
-    }
-
-    // 状態クラスを更新
+    if (timeEl) timeEl.textContent = remaining <= 0 ? "終了" : formatTimeRemaining(remaining);
     if (remaining <= 0) {
       el.classList.add("expired");
       el.classList.remove("available");
