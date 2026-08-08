@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.db_manager import get_db_manager
 from database.models import Race
+from scrapers.official_scraper import OfficialBoatraceScraper
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ class BoatraceDataFetcher:
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
+        self.official_scraper = OfficialBoatraceScraper()
 
     def fetch_races_for_date(self, target_date: datetime = None) -> list:
         """指定日のレースデータを公式サイトから取得"""
@@ -96,11 +98,37 @@ class BoatraceDataFetcher:
 
         logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
 
-        # すべての21会場のレースを生成
-        races = self._generate_all_venues_races(target_date)
-        logger.info(f"📊 合計 {len(races)}件のレースを取得")
+        # 当日開催会場を優先して対象を絞る
+        active_venue_codes = self._fetch_active_venues(target_date)
+        races = self._generate_all_venues_races(target_date, active_venue_codes)
+        logger.info(f"📊 合計 {len(races)}件のレースを取得（開催会場数: {len(active_venue_codes)}）")
 
         return races
+
+    def fetch_real_results_for_date(self, target_date: datetime = None) -> list:
+        """指定日の実レース結果を公式ページから取得（失敗時は空配列）。"""
+        if target_date is None:
+            target_date = datetime.now()
+        date_str = target_date.strftime("%Y%m%d")
+        logger.info(f"📥 実レース結果の取得開始: {date_str}")
+
+        venue_codes = self._fetch_active_venues(target_date)
+        if not venue_codes:
+            logger.warning("開催会場の取得に失敗したため、実レース結果取得をスキップ")
+            return []
+
+        records = []
+        for venue_code in venue_codes:
+            for race_no in range(1, 13):
+                result = self.official_scraper.fetch_race_result(
+                    date_str=date_str,
+                    venue_code=venue_code,
+                    race_no=race_no,
+                )
+                if result:
+                    records.append(result)
+        logger.info(f"✅ 実レース結果取得: {len(records)}件")
+        return records
 
     def _fetch_active_venues(self, target_date: datetime) -> list:
         """boatrace.jp から指定日に開催される会場コードのリストを取得"""
@@ -250,16 +278,16 @@ def main():
 
     fetcher = BoatraceDataFetcher()
 
-    # 当日のレースを取得
+    # 当日の実レース結果を取得
     today = datetime.now()
-    today_races = fetcher.fetch_races_for_date(today)
+    today_races = fetcher.fetch_real_results_for_date(today)
     saved_today = save_races_to_db(today_races)
 
     print()
 
-    # 翌日のレースを取得
+    # 翌日の実レース結果を取得（結果が未確定な場合は0件）
     tomorrow = today + timedelta(days=1)
-    tomorrow_races = fetcher.fetch_races_for_date(tomorrow)
+    tomorrow_races = fetcher.fetch_real_results_for_date(tomorrow)
     saved_tomorrow = save_races_to_db(tomorrow_races)
 
     print()
