@@ -253,7 +253,8 @@ def ensure_races_for_date(target_date: datetime) -> list:
     try:
         existing = db.get_races_by_date(session, target_date)
         if existing:
-            return list(existing)
+            materialized = list(existing)
+            return materialized
     finally:
         session.close()
 
@@ -267,7 +268,8 @@ def ensure_races_for_date(target_date: datetime) -> list:
 
     session = db.get_session()
     try:
-        return list(db.get_races_by_date(session, target_date))
+        materialized = list(db.get_races_by_date(session, target_date))
+        return materialized
     finally:
         session.close()
 
