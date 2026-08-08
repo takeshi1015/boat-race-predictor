@@ -85,14 +85,43 @@ class EnsembleModel:
         logger.info("アンサンブルモデルを初期化")
 
     def predict_today(self):
-        """当日の予測を実行"""
+        """当日のレース予測を実行"""
         logger.info("当日予測を開始")
-        return self._predict_for_period("today")
+        return self._predict_for_day_offset(0)
 
     def predict_tomorrow(self):
-        """翌日の予測を実行"""
+        """翌日のレース予測を実行"""
         logger.info("翌日予測を開始")
-        return self._predict_for_period("tomorrow")
+        return self._predict_for_day_offset(1)
+
+    def _predict_for_day_offset(self, day_offset: int) -> list:
+        """指定日オフセット(0=当日,1=翌日)のレース予測を実行"""
+        from database.db_manager import get_db_manager
+        from database.models import Race
+
+        target_date = datetime.now() + timedelta(days=day_offset)
+        start = datetime.combine(target_date.date(), datetime.min.time())
+        end = datetime.combine(target_date.date(), datetime.max.time())
+
+        db = get_db_manager()
+        session = db.get_session()
+        try:
+            races = session.query(Race).filter(Race.date.between(start, end)).all()
+            if not races:
+                return []
+
+            predictions = []
+            period = {0: "today", 1: "tomorrow"}.get(day_offset, f"day+{day_offset}")
+            for race in races:
+                prediction = self._predict_single_race(race, period)
+                if prediction:
+                    predictions.append(prediction)
+            return predictions
+        except Exception as e:
+            logger.error("日次予測エラー: %s", e, exc_info=True)
+            return []
+        finally:
+            session.close()
 
     def _predict_for_period(self, period: str) -> list:
         """指定期間のレースを予測"""
@@ -199,6 +228,14 @@ class EnsembleModel:
             }
         except Exception as e:
             logger.error(f"レース予測エラー: {e}")
+            return None
+
+    def _predict_single_race(self, race, period: str = "today") -> dict | None:
+        """単一レースの予測を生成"""
+        try:
+            return self._predict_race(race, period)
+        except Exception as e:
+            logger.error("単一レース予測エラー: %s", e, exc_info=True)
             return None
 
     def _get_race_data(self, period: str) -> list:
