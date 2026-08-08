@@ -13,6 +13,7 @@ from utils.logger import logger
 from predictor.ml_models import LogisticRegressionModel, RandomForestModel, NeuralNetworkModel
 from predictor.rule_based_model import RuleBasedModel
 from predictor.statistical_model import StatisticalModel
+from predictor.xgboost_model import XGBoostModel
 
 
 def main():
@@ -121,6 +122,7 @@ def run_all_predictions(race_data: Dict[str, Any]) -> Dict[str, Any]:
         "logistic_regression": LogisticRegressionModel(),
         "random_forest": RandomForestModel(),
         "neural_network": NeuralNetworkModel(),
+        "xgboost": XGBoostModel(),
         "rule_based": RuleBasedModel(),
         "statistical": StatisticalModel(),
     }

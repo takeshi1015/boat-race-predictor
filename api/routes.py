@@ -29,6 +29,7 @@ VALID_MODELS = {
     "logistic_regression",
     "random_forest",
     "neural_network",
+    "xgboost",
     "rule_based",
     "statistical",
     "ensemble",
@@ -48,6 +49,11 @@ MODEL_INFO: Dict[str, Dict[str, Any]] = {
     "neural_network": {
         "name": "Neural Network",
         "description": "Two-hidden-layer MLP implemented in NumPy with ReLU activations.",
+        "type": "machine_learning",
+    },
+    "xgboost": {
+        "name": "XGBoost (Gradient Boosting)",
+        "description": "Gradient boosting over N_ESTIMATORS rounds with feature-importance weights and lane advantage correction.",
         "type": "machine_learning",
     },
     "rule_based": {
@@ -459,3 +465,154 @@ def get_stats() -> Response:
     except Exception as exc:
         logger.error("Stats failed: %s", exc, exc_info=True)
         return jsonify({"error": "統計情報の取得に失敗しました"}), 500
+
+
+# ---------------------------------------------------------------------------
+# POST /api/backtest
+# ---------------------------------------------------------------------------
+@api_bp.route("/backtest", methods=["POST"])
+def post_backtest() -> Response:
+    """Run a backtest against supplied historical race data.
+
+    Request body (JSON)::
+
+        {
+            "races": [
+                {
+                    "race_id": "...",
+                    "entries": [...],
+                    "actual_result": [1st_id, 2nd_id, 3rd_id],
+                    "venue": "桐生",
+                    "race_number": 1,
+                    "odds": 15.0
+                },
+                ...
+            ],
+            "model": "ensemble",   // optional, defaults to ensemble
+            "bet_amount": 100      // optional
+        }
+
+    Returns:
+        JSON object with hit_rate, recovery_rate, and breakdown by confidence.
+    """
+    body = request.get_json(silent=True)
+    if not body or "races" not in body:
+        return jsonify({"error": "Request body must be JSON with a 'races' key."}), 400
+
+    past_races: list = body["races"]
+    model_name: str = body.get("model", "ensemble")
+    bet_amount: float = float(body.get("bet_amount", 100.0))
+
+    try:
+        from learner.backtest import backtest
+
+        # Build or pick the requested model
+        raw = run_all_predictions(past_races[0] if past_races else _SAMPLE_RACE)
+        model_result = raw.get(model_name) or raw.get("ensemble")
+
+        # Use a simple wrapper that re-runs run_all_predictions for each race
+        class _ApiModel:
+            def predict(self, race_data: Dict[str, Any]) -> Dict[str, Any]:
+                results = run_all_predictions(race_data)
+                return results.get(model_name) or results.get("ensemble", {})
+
+        bt_result = backtest(_ApiModel(), past_races, bet_amount=bet_amount)
+        return jsonify({
+            "timestamp": datetime.now().isoformat(),
+            "model": model_name,
+            "bet_amount": bet_amount,
+            **bt_result.to_dict(),
+        })
+
+    except Exception as exc:
+        logger.error("Backtest failed: %s", exc, exc_info=True)
+        return jsonify({"error": "バックテストに失敗しました"}), 500
+
+
+# ---------------------------------------------------------------------------
+# POST /api/optimize
+# ---------------------------------------------------------------------------
+@api_bp.route("/optimize", methods=["POST"])
+def post_optimize() -> Response:
+    """Filter predictions for profit-maximizing bets.
+
+    Request body (JSON)::
+
+        {
+            "predictions": [...],      // list of prediction dicts with confidence/estimated_odds
+            "bankroll": 10000,         // optional, default 10000 yen
+            "min_confidence": 0.70,    // optional
+            "min_expected_odds": 5.0,  // optional
+            "min_expected_value": 1.0  // optional
+        }
+
+    Returns:
+        JSON object with recommended races and bet sizes.
+    """
+    body = request.get_json(silent=True)
+    if not body or "predictions" not in body:
+        return jsonify({"error": "Request body must be JSON with a 'predictions' key."}), 400
+
+    predictions: list = body["predictions"]
+    bankroll: float = float(body.get("bankroll", 10_000.0))
+    optimizer_kwargs: Dict[str, Any] = {}
+    for key in ("min_confidence", "min_expected_odds", "min_expected_value"):
+        if key in body:
+            optimizer_kwargs[key] = float(body[key])
+
+    try:
+        from learner.profit_optimizer import ProfitOptimizer
+        optimizer = ProfitOptimizer(**optimizer_kwargs)
+        selected = optimizer.select_races(predictions, bankroll=bankroll)
+        report = optimizer.generate_report(selected, bankroll=bankroll)
+        return jsonify({
+            "timestamp": datetime.now().isoformat(),
+            **report,
+        })
+    except Exception as exc:
+        logger.error("Optimize failed: %s", exc, exc_info=True)
+        return jsonify({"error": "最適化に失敗しました"}), 500
+
+
+# ---------------------------------------------------------------------------
+# POST /api/failure-analysis
+# ---------------------------------------------------------------------------
+@api_bp.route("/failure-analysis", methods=["POST"])
+def post_failure_analysis() -> Response:
+    """Analyze why predictions were wrong.
+
+    Request body (JSON)::
+
+        {
+            "failures": [
+                {
+                    "predicted": [...],
+                    "actual": [...],
+                    "confidence": 0.75,
+                    "race_id": "..."
+                },
+                ...
+            ]
+        }
+
+    Returns:
+        JSON object with failure categories, counts, and improvement plan.
+    """
+    body = request.get_json(silent=True)
+    if not body or "failures" not in body:
+        return jsonify({"error": "Request body must be JSON with a 'failures' key."}), 400
+
+    failures: list = body["failures"]
+    try:
+        from learner.failure_analyzer import analyze_failures, improvement_summary
+        analysis = analyze_failures(failures)
+        summary_text = improvement_summary(analysis)
+        return jsonify({
+            "timestamp": datetime.now().isoformat(),
+            "summary": summary_text,
+            **analysis,
+        })
+    except Exception as exc:
+        logger.error("Failure analysis failed: %s", exc, exc_info=True)
+        return jsonify({"error": "失敗分析に失敗しました"}), 500
+
