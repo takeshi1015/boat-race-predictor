@@ -5,6 +5,7 @@
 
 import random
 from datetime import datetime, timedelta
+from itertools import permutations
 
 import numpy as np
 
@@ -31,33 +32,46 @@ _WATER_REASONS = {
 # ボートレースの購入締め切り時間
 RACE_TICKET_CUTOFF_MINUTES = 5
 
-# 買い目パターン（全6パターン）
-ALL_PATTERNS = [
-    [1, 2, 3],
-    [1, 3, 2],
-    [2, 1, 3],
-    [2, 3, 1],
-    [3, 1, 2],
-    [3, 2, 1],
-]
+# 全120通りの3連単
+BOATS = [1, 2, 3, 4, 5, 6]
+ALL_ORDERS = [list(p) for p in permutations(BOATS, 3)]
 
 
-def _make_prediction_order(weather: str, water_condition: str) -> list:
-    """買い目を生成（毎回ランダムに選択）"""
-    # 天気に基づいて確率を調整
-    if weather == "rainy":
-        # 雨天では波乱パターンを増やす
-        weights = [10, 10, 15, 15, 20, 20]
-    elif weather == "sunny":
-        # 晴天では1号艇有利パターンを増やす
-        weights = [25, 20, 15, 10, 15, 15]
-    else:  # cloudy
-        # 曇りは均等
-        weights = [16, 17, 17, 17, 17, 16]
+def _predict_boat_order(weather: str, water_condition: str, confidence: float) -> list:
+    """
+    天気・水面・信頼度に基づいて3連単を予想
+    高信頼度：1号艇が絡む確率が高い
+    低信頼度（穴狙い）：どの艇でも等確率
+    """
+    if confidence >= 0.75:
+        # 高信頼度：1号艇が1着の可能性が高い
+        first_boat = 1
+        remaining = [2, 3, 4, 5, 6]
+        if weather == "rainy":
+            # 雨天は波乱含み、内外艇の混在
+            second_third = random.sample(remaining, 2)
+        else:
+            # 晴天・曇りは内側寄り
+            inner_boats = [2, 3, 4]
+            if len(inner_boats) >= 2:
+                second_third = random.sample(inner_boats, 2)
+            else:
+                second_third = random.sample(remaining, 2)
+        return [first_boat] + second_third
     
-    # 加重ランダム選択
-    selected = random.choices(ALL_PATTERNS, weights=weights, k=1)[0]
-    return selected
+    elif confidence >= 0.60:
+        # 中信頼度：1,2号艇が上位の確率
+        if random.random() < 0.6:
+            first_boat = 1
+        else:
+            first_boat = 2
+        remaining = [b for b in BOATS if b != first_boat]
+        second_third = random.sample(remaining, 2)
+        return [first_boat] + second_third
+    
+    else:
+        # 低信頼度（穴狙い）：全120通りから等確率で選択
+        return random.choice(ALL_ORDERS)
 
 
 def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -> float:
@@ -197,8 +211,11 @@ class EnsembleModel:
             race_number = getattr(race, "race_number", 1)
             place = getattr(race, "place", None) or getattr(race, "venue", "不明")
 
-            predicted_order = _make_prediction_order(weather, water_cond)
+            # 信頼度を計算
             confidence = _confidence_from_conditions(weather, water_cond, hour)
+            
+            # 信頼度に基づいて3連単を予想
+            predicted_order = _predict_boat_order(weather, water_cond, confidence)
 
             reason = _WEATHER_REASONS.get(weather, "")
             water_reason = _WATER_REASONS.get(water_cond, "")
