@@ -72,3 +72,20 @@ def test_predict_today_fetches_races_and_closes_session(monkeypatch):
     assert len(predictions) == 1
     assert predictions[0]["race_id"] == "RACE-002"
     assert fake_session.closed is True
+
+
+def test_predict_single_race_passes_period(monkeypatch):
+    model = EnsembleModel()
+    race = SimpleNamespace(race_id="RACE-003")
+    captured = {}
+
+    def fake_predict_race(_race, period):
+        captured["period"] = period
+        return {"race_id": _race.race_id}
+
+    monkeypatch.setattr(model, "_predict_race", fake_predict_race)
+
+    result = model._predict_single_race(race, "tomorrow")
+
+    assert result["race_id"] == "RACE-003"
+    assert captured["period"] == "tomorrow"
