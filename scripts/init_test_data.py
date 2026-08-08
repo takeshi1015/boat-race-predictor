@@ -34,12 +34,12 @@ def _random_race_id(date: datetime, venue: str, race_number: int) -> str:
     return f"{date_str}_{venue_code}_{race_number:02d}"
 
 
-def _make_race(date: datetime, venue: str, race_number: int, hour: int) -> dict:
+def _make_race(date: datetime, venue: str, race_number: int, hour: int, minute: int = 0) -> dict:
     weather = random.choices(WEATHERS, weights=WEATHER_WEIGHT)[0]
     water = random.choice(WATER_CONDITIONS)
     return {
         "race_id": _random_race_id(date, venue, race_number),
-        "date": date.replace(hour=hour, minute=0, second=0, microsecond=0),
+        "date": date.replace(hour=hour, minute=minute, second=0, microsecond=0),
         "venue": venue,
         "place": venue,
         "race_number": race_number,
@@ -76,43 +76,35 @@ def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: flo
 
 
 def create_today_races(session, db, target_date: datetime, num_races: int = 10) -> list:
-    """当日のレースデータを作成（全24場から10場をランダム選択、現在時刻より30分以上後のレースのみ）"""
+    """当日のレースデータを作成（現在時刻より2時間以上先のレースのみを生成）"""
     now = datetime.now()
-    
-    # 全24場からランダムに選択
-    venues_today = random.sample(ALL_VENUES, min(num_races, len(ALL_VENUES)))
-    
-    # 現在時刻より30分以上後のレースを生成
-    current_hour = now.hour
-    current_minute = now.minute
-    
-    # 最初のレースは30分以上後
-    if current_minute < 30:
-        start_hour = current_hour + 1  # 次の時間の00分
-    else:
-        start_hour = current_hour + 1  # 次の時間の00分
-    
-    # 生成するレース時刻（現在時刻の30分以上後）
+
+    # 現在時刻から2時間以上先の時刻を計算
+    earliest_race_time = now + timedelta(hours=2)
+    start_hour = earliest_race_time.hour
+    start_minute = earliest_race_time.minute
+
+    # 生成するレース時刻：30分単位で2時間先から23時まで
     hours = []
     for i in range(num_races):
-        race_hour = start_hour + i
-        if race_hour < 24:  # 同日内のみ
-            hours.append(race_hour)
-    
-    # 時刻が不足する場合はランダムに生成
-    while len(hours) < num_races:
-        hours.append(random.randint(start_hour, 23))
-    
-    hours = hours[:num_races]
-    
+        total_minutes = start_hour * 60 + start_minute + i * 30
+        race_hour = total_minutes // 60
+        race_minute = total_minutes % 60
+        if race_hour < 24:
+            hours.append((race_hour, race_minute))
+
+    # 全24場からランダムに選択
+    venues_today = random.sample(ALL_VENUES, min(num_races, len(ALL_VENUES)))
+
     created = []
     for i, venue in enumerate(venues_today):
         if i < len(hours):
-            hour = hours[i]
+            hour, minute = hours[i]
         else:
             hour = random.randint(start_hour, 23)
-        
-        race_data = _make_race(target_date, venue, i + 1, hour)
+            minute = 0
+
+        race_data = _make_race(target_date, venue, i + 1, hour, minute)
         # 既存チェック
         existing = db.get_race(session, race_data["race_id"])
         if existing:

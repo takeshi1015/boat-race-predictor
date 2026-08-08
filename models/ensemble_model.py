@@ -45,17 +45,23 @@ def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -
         base -= 0.10
     if 10 <= hour <= 16:
         base += 0.05
-    return min(max(base + random.uniform(-0.05, 0.05), 0.30), 0.95)
+    return min(max(base + random.uniform(-0.15, 0.15), 0.50), 0.95)
 
 
-def _make_prediction_order(race_number: int, weather: str) -> list:
-    """シンプルなヒューリスティック予測：1号艇優先 + 変動"""
-    base = [1, 2, 3, 4, 5, 6]
+def _make_prediction_order(race_number: int, weather: str, venue: str = "") -> list:
+    """より多様な買い目パターンを生成"""
+    patterns = [
+        [1, 2, 3],
+        [1, 3, 2],
+        [2, 1, 3],
+        [2, 3, 1],
+        [3, 1, 2],
+        [3, 2, 1],
+    ]
     if weather == "rainy":
-        base = [2, 3, 1, 4, 5, 6]
-    elif race_number % 3 == 0:
-        base = [1, 3, 2, 4, 5, 6]
-    return base[:3]
+        patterns = patterns[2:] + patterns[:2]
+    selected = random.choice(patterns)
+    return selected[:3]
 
 
 def _is_race_purchasable(race_datetime: datetime) -> bool:
