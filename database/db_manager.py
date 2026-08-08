@@ -21,26 +21,26 @@ from database.models import (
 class DatabaseManager:
     """Database management class"""
     
-    def __init__(self, database_url: str = config.DATABASE_URL):
+    def __init__(self, database_url: Optional[str] = None):
         """
         Initialize database manager
         
         Args:
             database_url: Database connection URL
         """
-        self.database_url = database_url
+        self.database_url = database_url or config.DATABASE_URL
         
         # Create engine
-        if database_url.startswith("sqlite"):
+        if self.database_url.startswith("sqlite"):
             # SQLite configuration
             self.engine = create_engine(
-                database_url,
+                self.database_url,
                 connect_args={"check_same_thread": False},
                 poolclass=StaticPool,
             )
         else:
             # Other databases
-            self.engine = create_engine(database_url, pool_pre_ping=True)
+            self.engine = create_engine(self.database_url, pool_pre_ping=True)
         
         # Create session factory
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)

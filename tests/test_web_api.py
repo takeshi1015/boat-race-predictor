@@ -2,13 +2,33 @@
 
 import json
 import os
+from datetime import datetime
 import pytest
 
 from app import create_app
 
 
 @pytest.fixture
-def client():
+def isolated_database(tmp_path, monkeypatch):
+    """Use an isolated SQLite DB for tests that touch persisted race data."""
+    import config as cfg
+    import database.db_manager as db_manager_module
+
+    db_path = tmp_path / "test_boat_race.db"
+    monkeypatch.setattr(cfg, "DATABASE_URL", f"sqlite:///{db_path}")
+    if db_manager_module._db_manager is not None:
+        db_manager_module._db_manager.close()
+    db_manager_module._db_manager = None
+
+    yield db_path
+
+    if db_manager_module._db_manager is not None:
+        db_manager_module._db_manager.close()
+    db_manager_module._db_manager = None
+
+
+@pytest.fixture
+def client(isolated_database):
     """Create a Flask test client."""
     app = create_app()
     app.config["TESTING"] = True
@@ -69,6 +89,27 @@ def test_api_models_info(client):
     assert response.status_code == 200
     data = json.loads(response.data)
     assert "models" in data
+
+
+def test_api_today_populates_predictions(client):
+    """GET /api/races/today should auto-populate sample races and return predictions."""
+    response = client.get("/api/races/today")
+    assert response.status_code == 200
+
+    data = json.loads(response.data)
+    assert data["date"] == datetime.now().strftime("%Y-%m-%d")
+    assert data["count"] > 0
+    assert len(data["predictions"]) == data["count"]
+
+    confidences = [pred["confidence"] for pred in data["predictions"]]
+    assert all(conf >= 0.5 for conf in confidences)
+
+    first = data["predictions"][0]
+    assert "race_id" in first
+    assert "venue" in first
+    assert "race_time" in first
+    assert "purchase_deadline" in first
+    assert "predicted_order" in first
 
 
 def test_export_json(client):

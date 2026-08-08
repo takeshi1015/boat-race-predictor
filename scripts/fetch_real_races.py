@@ -96,11 +96,15 @@ class BoatraceDataFetcher:
 
         logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
 
-        # すべての21会場のレースを生成
-        races = self._generate_all_venues_races(target_date)
+        active_venues = self._fetch_active_venues(target_date)
+        races = self._generate_all_venues_races(target_date, active_venues)
         logger.info(f"📊 合計 {len(races)}件のレースを取得")
 
         return races
+
+    def generate_test_races_for_date(self, target_date: datetime, venue_codes: list = None) -> list:
+        """ネットワーク不要のテスト用レースデータを生成"""
+        return self._generate_all_venues_races(target_date, venue_codes)
 
     def _fetch_active_venues(self, target_date: datetime) -> list:
         """boatrace.jp から指定日に開催される会場コードのリストを取得"""
@@ -237,6 +241,37 @@ def save_races_to_db(races: list) -> int:
         logger.error(f"DB保存エラー: {e}")
         session.rollback()
         return 0
+    finally:
+        session.close()
+
+
+def ensure_races_for_date(target_date: datetime) -> list:
+    """指定日のレースをDBに確実に用意して返す"""
+    db = get_db_manager()
+    session = db.get_session()
+
+    try:
+        existing = db.get_races_by_date(session, target_date)
+        if existing:
+            materialized = list(existing)
+            session.expunge_all()
+            return materialized
+    finally:
+        session.close()
+
+    fetcher = BoatraceDataFetcher()
+    saved_count = save_races_to_db(fetcher.generate_test_races_for_date(target_date))
+    logger.info(
+        "📦 %s のレースデータを自動補完: %s件",
+        target_date.strftime("%Y-%m-%d"),
+        saved_count,
+    )
+
+    session = db.get_session()
+    try:
+        materialized = list(db.get_races_by_date(session, target_date))
+        session.expunge_all()
+        return materialized
     finally:
         session.close()
 

@@ -340,7 +340,10 @@ def get_today_races() -> Response:
     try:
         from models.ensemble_model import EnsembleModel
         model = EnsembleModel()
-        predictions = model.predict_today()
+        predictions = [
+            prediction for prediction in model.predict_today()
+            if prediction.get("confidence", 0.0) >= 0.5
+        ]
         return jsonify({
             "date": datetime.now().strftime("%Y-%m-%d"),
             "count": len(predictions),
@@ -365,7 +368,10 @@ def get_tomorrow_races() -> Response:
         from datetime import timedelta
         from models.ensemble_model import EnsembleModel
         model = EnsembleModel()
-        predictions = model.predict_tomorrow()
+        predictions = [
+            prediction for prediction in model.predict_tomorrow()
+            if prediction.get("confidence", 0.0) >= 0.5
+        ]
         tomorrow = datetime.now() + timedelta(days=1)
         return jsonify({
             "date": tomorrow.strftime("%Y-%m-%d"),
