@@ -111,7 +111,12 @@ class EnsembleModel:
                 return []
 
             predictions = []
-            period = "today" if day_offset == 0 else "tomorrow"
+            if day_offset == 0:
+                period = "today"
+            elif day_offset == 1:
+                period = "tomorrow"
+            else:
+                period = f"day+{day_offset}"
             for race in races:
                 prediction = self._predict_single_race(race, period)
                 if prediction:
@@ -232,7 +237,11 @@ class EnsembleModel:
 
     def _predict_single_race(self, race, period: str = "today") -> dict:
         """単一レースの予測を生成"""
-        return self._predict_race(race, period)
+        try:
+            return self._predict_race(race, period)
+        except Exception as e:
+            logger.error("単一レース予測エラー: %s", e, exc_info=True)
+            return None
 
     def _get_race_data(self, period: str) -> list:
         """データベースからレースデータを取得"""
