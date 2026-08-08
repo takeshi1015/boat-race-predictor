@@ -29,7 +29,15 @@ LINE_NOTIFY_TOKEN = os.getenv("LINE_NOTIFY_TOKEN", "your_line_token")
 
 # ==================== SCRAPER SETTINGS ====================
 SCRAPER_BASE_URL = "https://boatrace.jp"
+BOATRACE_BASE_URL = os.getenv("BOATRACE_BASE_URL", "https://boatrace.jp")
+BOATRACE_SCHEDULE_URL = os.getenv("BOATRACE_SCHEDULE_URL", "https://boatrace.jp/race/schedule")
+USER_AGENT = os.getenv(
+    "USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+)
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "30"))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+RETRY_BACKOFF = float(os.getenv("RETRY_BACKOFF", "2.0"))
 SCRAPER_RETRY_COUNT = int(os.getenv("SCRAPER_RETRY_COUNT", "3"))
 SCRAPER_RETRY_DELAY = int(os.getenv("SCRAPER_RETRY_DELAY", "5"))
 

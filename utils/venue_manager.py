@@ -44,11 +44,6 @@ class VenueManager:
         "若松": {"code": "22", "name_jp": "若松"},
     }
 
-    # 開催情報の初期値（公式サイト取得失敗時のフォールバック）
-    FIXED_SCHEDULE = {
-        "2026-08-02": ["桐生", "多摩川", "浜名湖", "常滑", "びわこ", "尼崎", "丸亀", "児島", "若松", "芦屋", "福岡", "唐津"],
-    }
-
     def __init__(self):
         self.cache_file = "venue_schedule.json"
         self.cache_expiry_hours = 1  # 1時間でキャッシュ無効（リアルタイム性を重視）
@@ -63,8 +58,8 @@ class VenueManager:
         優先順位：
         1. 公式サイトからスクレイピング（リアルタイム）← 最優先
         2. キャッシュから取得（スクレイピング失敗時）
-        3. DBのレースデータから抽出（ただしフィルタリング）
-        4. 開催情報の初期値（最終フォールバック）
+        3. DBの当日レースデータから抽出
+        4. DBの全レースデータから抽出（最終フォールバック）
         """
         # 1. 公式サイトからスクレイピング（最優先）
         try:
@@ -82,7 +77,7 @@ class VenueManager:
             logger.info(f"✅ キャッシュから開催場所取得: {cached_venues}")
             return cached_venues
 
-        # 3. DBのレースデータから開催場所を抽出
+        # 3. DBの当日レースデータから開催場所を抽出
         try:
             operating = self._get_venues_from_database()
             if operating:
@@ -91,12 +86,14 @@ class VenueManager:
         except Exception as e:
             logger.debug(f"DB抽出失敗: {e}")
 
-        # 4. 開催情報の初期値（最終フォールバック）
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        if today_str in self.FIXED_SCHEDULE:
-            operating = self.FIXED_SCHEDULE[today_str]
-            logger.warning(f"⚠️ 開催情報の初期値から取得: {operating}")
-            return operating
+        # 4. DBの全レースデータから開催場所を抽出（当日データが存在しない場合の最終フォールバック）
+        try:
+            operating = self._get_all_venues_from_database()
+            if operating:
+                logger.warning(f"⚠️ 当日DBデータなし。DB全体から開催場所を取得: {operating}")
+                return operating
+        except Exception as e:
+            logger.debug(f"DB全体抽出失敗: {e}")
 
         logger.warning("❌ 開催場所情報を取得できません")
         return []
@@ -104,9 +101,9 @@ class VenueManager:
     def get_operating_venues_tomorrow(self):
         """翌日開催中のレース場を取得"""
         from datetime import datetime, timedelta
-        
+
         tomorrow = datetime.now() + timedelta(days=1)
-        
+
         # 1. 公式サイトからスクレイピング（最優先）
         try:
             operating = self._fetch_from_official_site(target_date=tomorrow)
@@ -125,12 +122,14 @@ class VenueManager:
         except Exception as e:
             logger.debug(f"翌日DB抽出失敗: {e}")
 
-        # 3. 開催情報の初期値（最終フォールバック）
-        tomorrow_str = tomorrow.strftime("%Y-%m-%d")
-        if tomorrow_str in self.FIXED_SCHEDULE:
-            operating = self.FIXED_SCHEDULE[tomorrow_str]
-            logger.warning(f"⚠️ 翌日開催情報の初期値: {operating}")
-            return operating
+        # 3. DBの全レースデータから開催場所を抽出（最終フォールバック）
+        try:
+            operating = self._get_all_venues_from_database()
+            if operating:
+                logger.warning(f"⚠️ 翌日DBデータなし。DB全体から開催場所を取得: {operating}")
+                return operating
+        except Exception as e:
+            logger.debug(f"翌日DB全体抽出失敗: {e}")
 
         return []
 
@@ -233,6 +232,28 @@ class VenueManager:
                 session.close()
         except Exception as e:
             logger.debug(f"DB抽出エラー: {e}")
+            return None
+
+    def _get_all_venues_from_database(self):
+        """データベースの全レースデータから開催場所を抽出（日付を問わない最終フォールバック）"""
+        try:
+            from database.db_manager import get_db_manager
+            from database.models import Race
+
+            db = get_db_manager()
+            session = db.get_session()
+            try:
+                place_rows = session.query(Race.place).distinct().all()
+                venue_rows = session.query(Race.venue).distinct().all()
+                venues = sorted(set(
+                    r[0] for rows in (place_rows, venue_rows) for r in rows if r[0]
+                ))
+                logger.debug(f"DB全体から抽出したレース場: {venues}")
+                return venues if venues else None
+            finally:
+                session.close()
+        except Exception as e:
+            logger.debug(f"DB全体抽出エラー: {e}")
             return None
 
     def _load_cache(self):

@@ -139,7 +139,14 @@ class DatabaseManager:
         """Get races for specific date"""
         start = datetime.combine(date.date(), datetime.min.time())
         end = datetime.combine(date.date(), datetime.max.time())
-        return session.query(Race).filter(Race.date.between(start, end)).all()
+        races = session.query(Race).filter(Race.date.between(start, end)).all()
+        if not races:
+            logger.warning(
+                "No races found in DB for %s. Run `python scripts/init_test_data.py` "
+                "or `python scripts/fetch_real_races.py` to populate race data.",
+                date.strftime("%Y-%m-%d"),
+            )
+        return races
     
     # ============================================================================
     # Prediction Operations

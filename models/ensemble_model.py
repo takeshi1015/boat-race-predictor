@@ -263,7 +263,7 @@ class EnsembleModel:
             return None
 
     def _get_race_data(self, period: str) -> list:
-        """データベースからレースデータを取得"""
+        """データベースからレースデータを取得。当日データが存在しない場合は自動生成する。"""
         try:
             from database.db_manager import get_db_manager
             db = get_db_manager()
@@ -274,11 +274,40 @@ class EnsembleModel:
                 else:
                     target_date = datetime.now() + timedelta(days=1)
                 races = db.get_races_by_date(session, target_date)
-                return list(races)
+                if races:
+                    return list(races)
             finally:
                 session.close()
         except Exception as e:
             logger.error(f"レースデータ取得エラー: {e}")
+            return []
+
+        # 当日/翌日のレースデータが存在しない場合は自動生成してリトライ（開発・ステージング環境のみ）
+        if config.ENVIRONMENT == "production":
+            logger.warning(
+                f"{period}のレースデータがDBに存在しません。"
+                "`python scripts/init_test_data.py` または "
+                "`python scripts/fetch_real_races.py` を実行してください。"
+            )
+            return []
+
+        logger.warning(
+            f"{period}のレースデータがDBに存在しません。テストデータを自動生成します。"
+        )
+        try:
+            from scripts.init_test_data import create_today_races
+            from database.db_manager import get_db_manager
+            db = get_db_manager()
+            session = db.get_session()
+            try:
+                create_today_races(session, db, target_date, num_races=10, create_predictions=False)
+                races = db.get_races_by_date(session, target_date)
+                logger.info(f"テストデータ自動生成完了: {len(races)}件")
+                return list(races)
+            finally:
+                session.close()
+        except Exception as e:
+            logger.error(f"テストデータ自動生成エラー: {e}", exc_info=True)
             return []
 
     def evaluate_performance(self) -> dict:
