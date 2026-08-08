@@ -27,6 +27,16 @@ WEATHERS = ["sunny", "cloudy", "rainy"]
 WATER_CONDITIONS = ["calm", "slight", "moderate"]
 WEATHER_WEIGHT = [0.5, 0.35, 0.15]
 
+# 買い目パターン（全6パターン）
+ALL_PATTERNS = [
+    [1, 2, 3],
+    [1, 3, 2],
+    [2, 1, 3],
+    [2, 3, 1],
+    [3, 1, 2],
+    [3, 2, 1],
+]
+
 
 def _random_race_id(date: datetime, venue: str, race_number: int) -> str:
     date_str = date.strftime("%Y%m%d")
@@ -55,10 +65,58 @@ def _make_race(date: datetime, venue: str, race_number: int, hour: int) -> dict:
     }
 
 
-def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: float) -> dict:
-    predicted_order = [1, 2, 3] if is_hit else [2, 3, 1]
+def _make_prediction_order(weather: str, water_condition: str) -> list:
+    """買い目を生成（多様性確保）"""
+    if weather == "rainy":
+        weights = [10, 10, 15, 15, 20, 20]
+    elif weather == "sunny":
+        weights = [25, 20, 15, 10, 15, 15]
+    else:
+        weights = [16, 17, 17, 17, 17, 16]
+    
+    selected = random.choices(ALL_PATTERNS, weights=weights, k=1)[0]
+    return selected
+
+
+def _make_prediction(race_id: str, date: datetime, race_weather: str, race_water: str, hour: int) -> dict:
+    """予測データを生成（多様性確保）"""
+    predicted_order = _make_prediction_order(race_weather, race_water)
+    
+    # 信頼度を生成（50%～95%全範囲）
+    base = 0.50
+    if race_weather == "sunny":
+        base += 0.25
+    elif race_weather == "cloudy":
+        base += 0.05
+    else:
+        base -= 0.10
+    
+    if race_water == "calm":
+        base += 0.20
+    elif race_water == "slight":
+        base += 0.10
+    elif race_water == "moderate":
+        base -= 0.05
+    else:
+        base -= 0.15
+    
+    if 10 <= hour <= 14:
+        base += 0.15
+    elif 15 <= hour <= 17:
+        base += 0.05
+    elif hour < 9:
+        base -= 0.10
+    else:
+        base -= 0.05
+    
+    confidence = base + random.uniform(-0.30, 0.30)
+    confidence = min(max(confidence, 0.50), 0.95)
+    
+    is_hit = random.random() < 0.55
+    
     # 実際のオッズはランダムに生成（テスト用シミュレーションデータ）
-    actual_odds = round(random.uniform(2.0, 50.0), 1)
+    actual_odds = round(random.uniform(5.0, 50.0), 1) if is_hit else 0.0
+    
     return {
         "race_id": race_id,
         "prediction_date": date,
@@ -70,7 +128,7 @@ def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: flo
         "methods_used": ["statistical", "ml", "rule_based"],
         "result": {
             "is_hit": is_hit,
-            "actual_odds": actual_odds if is_hit else 0.0,
+            "actual_odds": actual_odds,
         },
     }
 
@@ -145,17 +203,19 @@ def create_historical_data(session, db, days: int = 30) -> int:
             existing = db.get_race(session, race_data["race_id"])
             if existing:
                 race_id = existing.race_id
+                weather = existing.weather
+                water = existing.water_condition
             else:
                 race = Race(**race_data)
                 session.add(race)
                 session.flush()
                 race_id = race.race_id
+                weather = race.weather
+                water = race.water_condition
             total_races += 1
 
-            # 過去予測（的中率 ~55%）
-            is_hit = random.random() < 0.55
-            confidence = round(random.uniform(0.55, 0.90), 2)
-            pred_data = _make_prediction(race_id, target_date, is_hit, confidence)
+            # 予測データを生成（多様性確保）
+            pred_data = _make_prediction(race_id, target_date, weather, water, hour)
             pred = Prediction(**pred_data)
             session.add(pred)
             total_predictions += 1
