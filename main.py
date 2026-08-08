@@ -247,6 +247,14 @@ def _run_scheduler():
 
     scheduler = _get_scheduler()
     scheduler.start()
+
+    # Also start the real-time race data scheduler (daily 5:00 AM)
+    try:
+        from src.scheduler import RaceScheduler
+        race_scheduler = RaceScheduler()
+        race_scheduler.start()
+    except Exception as exc:
+        logger.warning("RaceScheduler 起動失敗: %s", exc)
     
     try:
         # Keep the application running

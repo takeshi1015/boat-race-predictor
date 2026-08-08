@@ -428,6 +428,53 @@ def post_retrain() -> Response:
 
 
 # ---------------------------------------------------------------------------
+# POST /api/races/refresh
+# ---------------------------------------------------------------------------
+@api_bp.route("/races/refresh", methods=["POST"])
+def refresh_races() -> Response:
+    """手動でレースデータを取得・更新する。
+
+    boatrace.jp から当日のレースデータをスクレイピングして DB に保存し、
+    予想を生成する。ダッシュボードの「更新」ボタンから呼び出される。
+
+    Returns:
+        JSON オブジェクト（取得件数・予想件数・エラー情報を含む）。
+    """
+    try:
+        from src.scraper import RaceDataScraper
+        from src.scheduler import RaceScheduler
+
+        scraper = RaceDataScraper()
+        races = scraper.fetch_and_save_today()
+
+        predictions_saved = 0
+        errors = []
+        if races:
+            try:
+                from models.ensemble_model import EnsembleModel
+
+                model = EnsembleModel()
+                predictions = model.predict_today()
+                predictions_saved = RaceScheduler._save_predictions(predictions)
+            except Exception as exc:
+                errors.append("予想生成に失敗しました")
+                logger.error("予想生成エラー: %s", exc, exc_info=True)
+
+        return jsonify(
+            {
+                "status": "ok",
+                "timestamp": datetime.now().isoformat(),
+                "races_fetched": len(races),
+                "predictions_saved": predictions_saved,
+                "errors": errors,
+            }
+        )
+    except Exception as exc:
+        logger.error("レースデータ更新エラー: %s", exc, exc_info=True)
+        return jsonify({"error": "レースデータの更新に失敗しました"}), 500
+
+
+# ---------------------------------------------------------------------------
 # GET /api/stats
 # ---------------------------------------------------------------------------
 @api_bp.route("/stats", methods=["GET"])
