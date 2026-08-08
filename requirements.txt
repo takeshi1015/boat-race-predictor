@@ -18,8 +18,8 @@ scipy==1.11.4
 
 # Machine Learning
 scikit-learn==1.3.2
-tensorflow==2.14.0
-keras==2.14.0
+tensorflow==2.17.0
+keras==2.17.0
 xgboost==2.0.3
 
 # Reinforcement Learning
@@ -61,3 +61,4 @@ mypy==1.7.1
 # Utilities
 python-dateutil==2.8.2
 pytz==2023.3
+python-dotenv
