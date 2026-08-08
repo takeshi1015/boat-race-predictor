@@ -55,8 +55,11 @@ def _make_race(date: datetime, venue: str, race_number: int, hour: int) -> dict:
     }
 
 
-def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: float) -> dict:
-    predicted_order = [1, 2, 3] if is_hit else [2, 3, 1]
+def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: float,
+                     race_number: int = 1, weather: str = "sunny", water_condition: str = "calm") -> dict:
+    from models.ensemble_model import _make_prediction_order, _confidence_from_conditions
+    predicted_order = _make_prediction_order(race_number, weather, water_condition)
+    confidence = _confidence_from_conditions(weather, water_condition, date.hour)
     # 実際のオッズはランダムに生成（テスト用シミュレーションデータ）
     actual_odds = round(random.uniform(2.0, 50.0), 1)
     return {
@@ -64,7 +67,7 @@ def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: flo
         "prediction_date": date,
         "prediction_type": "high_confidence" if confidence >= 0.7 else "standard",
         "predicted_order": predicted_order,
-        "confidence": confidence,
+        "confidence": round(confidence, 2),
         "estimated_odds": round(random.uniform(3.0, 20.0), 1),
         "model_version": "1.0",
         "methods_used": ["statistical", "ml", "rule_based"],
@@ -155,7 +158,10 @@ def create_historical_data(session, db, days: int = 30) -> int:
             # 過去予測（的中率 ~55%）
             is_hit = random.random() < 0.55
             confidence = round(random.uniform(0.55, 0.90), 2)
-            pred_data = _make_prediction(race_id, target_date, is_hit, confidence)
+            pred_data = _make_prediction(race_id, target_date, is_hit, confidence,
+                                         race_number=i + 1,
+                                         weather=race_data["weather"],
+                                         water_condition=race_data["water_condition"])
             pred = Prediction(**pred_data)
             session.add(pred)
             total_predictions += 1
