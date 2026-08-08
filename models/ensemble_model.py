@@ -3,7 +3,6 @@
 複数の機械学習モデルを組み合わせて予測
 """
 
-import random
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -45,7 +44,7 @@ def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -
         base -= 0.10
     if 10 <= hour <= 16:
         base += 0.05
-    return min(max(base + random.uniform(-0.05, 0.05), 0.30), 0.95)
+    return min(max(base, 0.30), 0.95)
 
 
 def _make_prediction_order(race_number: int, weather: str) -> list:
@@ -205,6 +204,7 @@ class EnsembleModel:
         """データベースからレースデータを取得"""
         try:
             from database.db_manager import get_db_manager
+            from scripts.fetch_real_races import ensure_races_for_date
             db = get_db_manager()
             session = db.get_session()
             try:
@@ -213,9 +213,12 @@ class EnsembleModel:
                 else:
                     target_date = datetime.now() + timedelta(days=1)
                 races = db.get_races_by_date(session, target_date)
-                return list(races)
+                if races:
+                    return list(races)
             finally:
                 session.close()
+
+            return ensure_races_for_date(target_date)
         except Exception as e:
             logger.error(f"レースデータ取得エラー: {e}")
             return []
