@@ -338,9 +338,49 @@ def get_today_races() -> Response:
         JSON array of race predictions.
     """
     try:
+        from database.db_manager import get_db_manager
+        from database.models import Prediction
+        db = get_db_manager()
+        session = db.get_session()
+        try:
+            today_str = datetime.now().strftime("%Y%m%d")
+            live_rows = session.query(Prediction).filter(
+                Prediction.prediction_type == "live_xgboost",
+                Prediction.race_id.like(f"{today_str}%"),
+            ).order_by(Prediction.confidence.desc()).all()
+
+            if live_rows:
+                predictions = []
+                for row in live_rows:
+                    meta = row.result or {}
+                    predictions.append(
+                        {
+                            "race_id": row.race_id,
+                            "date": row.prediction_date.isoformat() if row.prediction_date else datetime.now().isoformat(),
+                            "place": meta.get("venue", ""),
+                            "venue": meta.get("venue", ""),
+                            "race_number": meta.get("race_number", 0),
+                            "predicted_order": row.predicted_order or [],
+                            "confidence": float(row.confidence or 0.0),
+                            "reason": "XGBoost live prediction",
+                            "is_recommended": float(row.confidence or 0.0) >= 0.7,
+                        }
+                    )
+                predictions.sort(key=lambda x: x.get("confidence", 0.0), reverse=True)
+                return jsonify({
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "count": len(predictions),
+                    "predictions": predictions,
+                })
+        finally:
+            session.close()
+
         from models.ensemble_model import EnsembleModel
         model = EnsembleModel()
         predictions = model.predict_today()
+        predictions.sort(key=lambda x: x.get("confidence", 0.0), reverse=True)
+        for pred in predictions:
+            pred["is_recommended"] = float(pred.get("confidence", 0.0)) >= 0.7
         return jsonify({
             "date": datetime.now().strftime("%Y-%m-%d"),
             "count": len(predictions),
