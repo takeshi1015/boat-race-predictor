@@ -76,19 +76,29 @@ async function loadPredictions() {
       const order = (pred.predicted_order || []).join("-") || "-";
       const conf = pred.confidence || 0;
       const confPct = (conf * 100).toFixed(1);
+      const raceTime = pred.race_time || "?";
       const card = document.createElement("div");
       card.className = "col-md-6 col-lg-4";
       card.innerHTML = `
         <div class="card shadow-sm h-100 ${conf >= CONFIDENCE_THRESHOLD ? 'border-primary' : ''}">
           <div class="card-header d-flex justify-content-between align-items-center">
             <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
-            <span class="badge bg-secondary">${pred.race_number}レース</span>
+            <span class="badge bg-secondary">${pred.race_number}R</span>
           </div>
           <div class="card-body">
+            <!-- レース時刻 -->
+            <div class="small text-muted mb-3">
+              <i class="bi bi-clock me-1"></i>
+              <strong>${raceTime}</strong>
+            </div>
+            
+            <!-- 推奨買い目 -->
             <div class="text-center mb-3">
               <span class="display-6 fw-bold text-primary">${order}</span>
               <p class="text-muted small mb-0">推奨買い目</p>
             </div>
+            
+            <!-- 信頼度 -->
             <div class="d-flex justify-content-between align-items-center mb-2">
               <span class="text-muted small">信頼度</span>
               <span class="badge ${badgeClass(conf)}">${labelText(conf)}</span>
