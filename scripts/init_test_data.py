@@ -7,6 +7,7 @@ import sys
 import os
 import random
 from datetime import datetime, timedelta
+from sqlalchemy import func
 
 # プロジェクトルートをパスに追加
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -34,12 +35,37 @@ def _random_race_id(date: datetime, venue: str, race_number: int) -> str:
     return f"{date_str}_{venue_code}_{race_number:02d}"
 
 
-def _make_race(date: datetime, venue: str, race_number: int, hour: int) -> dict:
+VENUE_RACE_TIMES = {
+    "桐生": [(9, 30), (10, 50), (12, 10), (13, 30), (14, 50), (16, 10), (17, 25)],
+    "戸田": [(8, 0), (9, 10), (10, 25), (11, 40), (13, 0), (14, 20), (15, 35)],
+    "江戸川": [(9, 20), (10, 35), (11, 50), (13, 5), (14, 20), (15, 35), (16, 50)],
+    "平和島": [(9, 40), (10, 55), (12, 10), (13, 25), (14, 40), (15, 55), (17, 10)],
+    "多摩川": [(10, 0), (11, 15), (12, 30), (13, 45), (15, 0), (16, 15), (17, 30)],
+    "浜名湖": [(10, 10), (11, 25), (12, 40), (13, 55), (15, 10), (16, 25), (17, 40)],
+    "蒲郡": [(15, 0), (15, 30), (16, 0), (16, 30), (17, 0), (17, 30), (18, 0)],
+    "常滑": [(10, 20), (11, 35), (12, 50), (14, 5), (15, 20), (16, 35), (17, 50)],
+    "津": [(10, 30), (11, 45), (13, 0), (14, 15), (15, 30), (16, 45), (18, 0)],
+    "三国": [(8, 40), (9, 30), (10, 20), (11, 10), (12, 0), (12, 50), (13, 40)],
+    "びわこ": [(10, 50), (12, 5), (13, 20), (14, 35), (15, 50), (17, 5), (18, 20)],
+    "住之江": [(15, 20), (15, 50), (16, 20), (16, 50), (17, 20), (17, 50), (18, 20)],
+    "尼崎": [(10, 50), (12, 5), (13, 20), (14, 35), (15, 50), (17, 5), (18, 20)],
+    "鳴門": [(8, 30), (9, 20), (10, 10), (11, 0), (11, 50), (12, 40), (13, 30)],
+    "丸亀": [(15, 30), (16, 0), (16, 30), (17, 0), (17, 30), (18, 0), (18, 30)],
+    "児島": [(10, 45), (12, 0), (13, 15), (14, 30), (15, 45), (17, 0), (18, 15)],
+    "宮島": [(11, 0), (12, 15), (13, 30), (14, 45), (16, 0), (17, 15), (18, 30)],
+    "芦屋": [(8, 30), (9, 20), (10, 10), (11, 0), (11, 50), (12, 40), (13, 30)],
+    "福岡": [(11, 15), (12, 30), (13, 45), (15, 0), (16, 15), (17, 30), (18, 45)],
+    "唐津": [(8, 45), (9, 35), (10, 25), (11, 15), (12, 5), (12, 55), (13, 45)],
+    "大村": [(15, 30), (16, 0), (16, 30), (17, 0), (17, 30), (18, 0), (18, 30)],
+}
+
+
+def _make_race(date: datetime, venue: str, race_number: int, hour: int, minute: int) -> dict:
     weather = random.choices(WEATHERS, weights=WEATHER_WEIGHT)[0]
     water = random.choice(WATER_CONDITIONS)
     return {
         "race_id": _random_race_id(date, venue, race_number),
-        "date": date.replace(hour=hour, minute=0, second=0, microsecond=0),
+        "date": date.replace(hour=hour, minute=minute, second=0, microsecond=0),
         "venue": venue,
         "place": venue,
         "race_number": race_number,
@@ -75,49 +101,17 @@ def _make_prediction(race_id: str, date: datetime, is_hit: bool, confidence: flo
     }
 
 
-def create_today_races(session, db, target_date: datetime, num_races: int = 10) -> list:
-    """当日のレースデータを作成（全24場から10場をランダム選択、現在時刻より30分以上後のレースのみ）"""
-    now = datetime.now()
-    
-    # 全24場からランダムに選択
-    venues_today = random.sample(ALL_VENUES, min(num_races, len(ALL_VENUES)))
-    
-    # 現在時刻より30分以上後のレースを生成
-    current_hour = now.hour
-    current_minute = now.minute
-    
-    # 最初のレースは30分以上後
-    if current_minute < 30:
-        start_hour = current_hour + 1  # 次の時間の00分
-    else:
-        start_hour = current_hour + 1  # 次の時間の00分
-    
-    # 生成するレース時刻（現在時刻の30分以上後）
-    hours = []
-    for i in range(num_races):
-        race_hour = start_hour + i
-        if race_hour < 24:  # 同日内のみ
-            hours.append(race_hour)
-    
-    # 時刻が不足する場合はランダムに生成
-    while len(hours) < num_races:
-        hours.append(random.randint(start_hour, 23))
-    
-    hours = hours[:num_races]
-    
+def create_today_races(session, db, target_date: datetime) -> list:
+    """当日のレースデータを作成（全会場・固定時刻）"""
+    target_date_only = target_date.date().isoformat()
+    session.query(Race).filter(func.date(Race.date) == target_date_only).delete(synchronize_session=False)
+    session.flush()
+
     created = []
-    for i, venue in enumerate(venues_today):
-        if i < len(hours):
-            hour = hours[i]
-        else:
-            hour = random.randint(start_hour, 23)
-        
-        race_data = _make_race(target_date, venue, i + 1, hour)
-        # 既存チェック
-        existing = db.get_race(session, race_data["race_id"])
-        if existing:
-            created.append(existing)
-        else:
+    for venue in ALL_VENUES:
+        race_times = VENUE_RACE_TIMES.get(venue, [(11, 0), (12, 20), (13, 40), (15, 0), (16, 20), (17, 40), (19, 0)])
+        for race_number, (hour, minute) in enumerate(race_times, start=1):
+            race_data = _make_race(target_date, venue, race_number, hour, minute)
             race = Race(**race_data)
             session.add(race)
             session.flush()
@@ -136,11 +130,11 @@ def create_historical_data(session, db, days: int = 30) -> int:
         target_date = today - timedelta(days=day_offset)
         num_venues = random.randint(5, 10)
         venues_day = random.sample(ALL_VENUES, num_venues)
-        hours = [10, 12, 14, 16, 18, 20]
+        race_times = [(10, 0), (12, 0), (14, 0), (16, 0), (18, 0), (20, 0)]
 
         for i, venue in enumerate(venues_day):
-            hour = hours[i % len(hours)]
-            race_data = _make_race(target_date, venue, i + 1, hour)
+            hour, minute = race_times[i % len(race_times)]
+            race_data = _make_race(target_date, venue, i + 1, hour, minute)
 
             existing = db.get_race(session, race_data["race_id"])
             if existing:
@@ -178,20 +172,22 @@ def main():
         today = datetime.now()
         tomorrow = today + timedelta(days=1)
 
-        # 当日レース（全24場からランダム選択）
+        # 当日レース（全会場・固定時刻）
         print("📅 当日レースデータを作成中...")
         print(f"   現在時刻: {today.strftime('%H:%M:%S')}")
-        today_races = create_today_races(session, db, today, num_races=10)
+        today_races = create_today_races(session, db, today)
         print(f"  ✅ 当日レース: {len(today_races)}件")
         for r in today_races:
             place = r.place or r.venue or "?"
-            print(f"    - {place}競艇場 {r.race_number}レース "
-                  f"({r.weather}, {r.water_condition}, {r.start_time_hour}時)")
+            print(
+                f"    - {place}競艇場 {r.race_number}レース "
+                f"({r.date.strftime('%H:%M')}, {r.weather}, {r.water_condition})"
+            )
 
         # 翌日レース
         print()
         print("📅 翌日レースデータを作成中...")
-        tomorrow_races = create_today_races(session, db, tomorrow, num_races=10)
+        tomorrow_races = create_today_races(session, db, tomorrow)
         print(f"  ✅ 翌日レース: {len(tomorrow_races)}件")
 
         # 過去30日間データ

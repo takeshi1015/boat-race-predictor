@@ -46,6 +46,8 @@
 
 {% block scripts_extra %}
 <script>
+const PURCHASE_DEADLINE_OFFSET_MS = 5 * 60 * 1000;
+
 function starsHtml(confidence) {
   const filled = Math.round(confidence * 5);
   return "⭐".repeat(filled) + "☆".repeat(5 - filled);
@@ -63,9 +65,21 @@ function createRaceCard(pred, category) {
   const confPct = (conf * 100).toFixed(1);
   const isHighConfidence = category === "high_confidence";
   
-  const raceTime = pred.race_time || "?";
-  const deadline = pred.purchase_deadline || "?";
-  const deadlineIso = pred.purchase_deadline_iso || "";
+  const raceDate = pred.date ? new Date(pred.date) : null;
+  const computedRaceTime = raceDate && !Number.isNaN(raceDate.getTime())
+    ? raceDate.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false })
+    : "?";
+  const raceTime = pred.race_time || computedRaceTime;
+
+  const computedDeadline = raceDate && !Number.isNaN(raceDate.getTime())
+    ? new Date(raceDate.getTime() - PURCHASE_DEADLINE_OFFSET_MS)
+    : null;
+  const deadline = pred.purchase_deadline || (
+    computedDeadline
+      ? computedDeadline.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false })
+      : "?"
+  );
+  const deadlineIso = pred.purchase_deadline_iso || (computedDeadline ? computedDeadline.toISOString() : "");
   const timeRemaining = pred.time_remaining || 0;
   const isPurchasable = pred.is_purchasable;
   

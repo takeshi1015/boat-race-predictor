@@ -137,9 +137,13 @@ class DatabaseManager:
     
     def get_races_by_date(self, session: Session, date: datetime) -> List[Race]:
         """Get races for specific date"""
-        start = datetime.combine(date.date(), datetime.min.time())
-        end = datetime.combine(date.date(), datetime.max.time())
-        return session.query(Race).filter(Race.date.between(start, end)).all()
+        target_date_only = date.date().isoformat()
+        return (
+            session.query(Race)
+            .filter(func.date(Race.date) == target_date_only)
+            .order_by(Race.date.asc())
+            .all()
+        )
     
     # ============================================================================
     # Prediction Operations

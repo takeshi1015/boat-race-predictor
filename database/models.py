@@ -95,6 +95,15 @@ class Race(Base):
     
     __table_args__ = {"comment": "レース情報"}
 
+    @property
+    def race_time(self):
+        """後方互換用: race_time は date カラムを参照する。"""
+        return self.date
+
+    @race_time.setter
+    def race_time(self, value):
+        self.date = value
+
 
 class Prediction(Base):
     """Prediction table"""

@@ -45,7 +45,7 @@ def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -
         base -= 0.10
     if 10 <= hour <= 16:
         base += 0.05
-    return min(max(base + random.uniform(-0.05, 0.05), 0.30), 0.95)
+    return min(max(base + random.uniform(-0.05, 0.05), 0.50), 0.95)
 
 
 def _make_prediction_order(race_number: int, weather: str) -> list:
@@ -149,7 +149,11 @@ class EnsembleModel:
         try:
             weather = getattr(race, "weather", None) or "sunny"
             water_cond = getattr(race, "water_condition", None) or "calm"
-            hour = getattr(race, "start_time_hour", None) or 12
+            race_datetime = getattr(race, "race_time", None) or getattr(race, "date", None)
+            hour = getattr(race, "start_time_hour", None)
+            if hour is None and isinstance(race_datetime, datetime):
+                hour = race_datetime.hour
+            hour = hour or 12
             race_number = getattr(race, "race_number", 1)
             place = getattr(race, "place", None) or getattr(race, "venue", "不明")
 
@@ -161,7 +165,7 @@ class EnsembleModel:
             if water_reason:
                 reason = reason + "。" + water_reason if reason else water_reason
 
-            date_val = getattr(race, "date", datetime.now())
+            date_val = race_datetime or datetime.now()
             date_str = date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val)
 
             # レース時刻と購入制限時刻の計算
