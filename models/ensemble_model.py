@@ -33,29 +33,65 @@ RACE_TICKET_CUTOFF_MINUTES = 5
 
 
 def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -> float:
-    """条件から信頼度スコアを算出"""
-    base = 0.65
+    """条件から信頼度スコアを算出（50%～95% の全範囲を使用）"""
+    base = 0.50
+
     if weather == "sunny":
-        base += 0.15
-    elif weather == "rainy":
-        base -= 0.10
-    if water_condition == "calm":
-        base += 0.10
-    elif water_condition in ("moderate", "rough"):
-        base -= 0.10
-    if 10 <= hour <= 16:
+        base += 0.25
+    elif weather == "cloudy":
         base += 0.05
-    return min(max(base + random.uniform(-0.05, 0.05), 0.30), 0.95)
+    else:  # rainy
+        base -= 0.10
+
+    if water_condition == "calm":
+        base += 0.20
+    elif water_condition == "slight":
+        base += 0.10
+    elif water_condition == "moderate":
+        base -= 0.05
+    else:  # rough
+        base -= 0.15
+
+    if 10 <= hour <= 14:
+        base += 0.15
+    elif 15 <= hour <= 17:
+        base += 0.05
+    elif hour < 9:
+        base -= 0.10
+    else:
+        base -= 0.05
+
+    random_factor = random.uniform(-0.30, 0.30)
+    confidence = base + random_factor
+    return min(max(confidence, 0.50), 0.95)
 
 
-def _make_prediction_order(race_number: int, weather: str) -> list:
-    """シンプルなヒューリスティック予測：1号艇優先 + 変動"""
-    base = [1, 2, 3, 4, 5, 6]
+def _make_prediction_order(race_number: int, weather: str, water_condition: str = "", venue: str = "") -> list:
+    """買い目を生成（各レースで独立してランダムに選択）"""
+    all_patterns = [
+        [1, 2, 3],
+        [1, 3, 2],
+        [2, 1, 3],
+        [2, 3, 1],
+        [3, 1, 2],
+        [3, 2, 1],
+    ]
+
     if weather == "rainy":
-        base = [2, 3, 1, 4, 5, 6]
-    elif race_number % 3 == 0:
-        base = [1, 3, 2, 4, 5, 6]
-    return base[:3]
+        weights = [10, 10, 15, 15, 20, 20]
+    elif weather == "sunny":
+        weights = [25, 20, 15, 10, 15, 15]
+    else:  # cloudy
+        weights = [16, 17, 17, 17, 17, 16]
+
+    selected = random.choices(all_patterns, weights=weights, k=1)[0]
+
+    if random.random() < 0.05:
+        pattern = list(range(1, 7))
+        random.shuffle(pattern)
+        return pattern[:3]
+
+    return selected
 
 
 def _is_race_purchasable(race_datetime: datetime) -> bool:
@@ -153,7 +189,7 @@ class EnsembleModel:
             race_number = getattr(race, "race_number", 1)
             place = getattr(race, "place", None) or getattr(race, "venue", "不明")
 
-            predicted_order = _make_prediction_order(race_number, weather)
+            predicted_order = _make_prediction_order(race_number, weather, water_cond, place)
             confidence = _confidence_from_conditions(weather, water_cond, hour)
 
             reason = _WEATHER_REASONS.get(weather, "")
