@@ -28,34 +28,78 @@ _WATER_REASONS = {
     "rough": "荒れた水面で波乱含みの展開",
 }
 
-# ボートレースの購入締め切り時間（レース開始の何分前まで購入可能か）
+# ボートレースの購入締め切り時間
 RACE_TICKET_CUTOFF_MINUTES = 5
+
+# 買い目パターン（全6パターン）
+ALL_PATTERNS = [
+    [1, 2, 3],
+    [1, 3, 2],
+    [2, 1, 3],
+    [2, 3, 1],
+    [3, 1, 2],
+    [3, 2, 1],
+]
+
+
+def _make_prediction_order(weather: str, water_condition: str) -> list:
+    """買い目を生成（毎回ランダムに選択）"""
+    # 天気に基づいて確率を調整
+    if weather == "rainy":
+        # 雨天では波乱パターンを増やす
+        weights = [10, 10, 15, 15, 20, 20]
+    elif weather == "sunny":
+        # 晴天では1号艇有利パターンを増やす
+        weights = [25, 20, 15, 10, 15, 15]
+    else:  # cloudy
+        # 曇りは均等
+        weights = [16, 17, 17, 17, 17, 16]
+    
+    # 加重ランダム選択
+    selected = random.choices(ALL_PATTERNS, weights=weights, k=1)[0]
+    return selected
 
 
 def _confidence_from_conditions(weather: str, water_condition: str, hour: int) -> float:
-    """条件から信頼度スコアを算出"""
-    base = 0.65
+    """条件から信頼度スコアを算出（50%～95%全範囲）"""
+    base = 0.50
+    
+    # 天気の影響（大きく変動）
     if weather == "sunny":
-        base += 0.15
-    elif weather == "rainy":
-        base -= 0.10
-    if water_condition == "calm":
-        base += 0.10
-    elif water_condition in ("moderate", "rough"):
-        base -= 0.10
-    if 10 <= hour <= 16:
+        base += 0.25
+    elif weather == "cloudy":
         base += 0.05
-    return min(max(base + random.uniform(-0.05, 0.05), 0.30), 0.95)
-
-
-def _make_prediction_order(race_number: int, weather: str) -> list:
-    """シンプルなヒューリスティック予測：1号艇優先 + 変動"""
-    base = [1, 2, 3, 4, 5, 6]
-    if weather == "rainy":
-        base = [2, 3, 1, 4, 5, 6]
-    elif race_number % 3 == 0:
-        base = [1, 3, 2, 4, 5, 6]
-    return base[:3]
+    else:  # rainy
+        base -= 0.10
+    
+    # 水面状況の影響
+    if water_condition == "calm":
+        base += 0.20
+    elif water_condition == "slight":
+        base += 0.10
+    elif water_condition == "moderate":
+        base -= 0.05
+    else:  # rough
+        base -= 0.15
+    
+    # 時間帯の影響
+    if 10 <= hour <= 14:
+        base += 0.15
+    elif 15 <= hour <= 17:
+        base += 0.05
+    elif hour < 9:
+        base -= 0.10
+    else:
+        base -= 0.05
+    
+    # 大きなランダム要素を追加（±30%）
+    random_factor = random.uniform(-0.30, 0.30)
+    confidence = base + random_factor
+    
+    # 50%～95%の範囲に収める
+    confidence = min(max(confidence, 0.50), 0.95)
+    
+    return confidence
 
 
 def _is_race_purchasable(race_datetime: datetime) -> bool:
@@ -106,7 +150,7 @@ class EnsembleModel:
             predictions = []
             now = datetime.now()
             
-            # DBから開催中のレース場を抽出（シンプルな方法）
+            # DBから開催中のレース場を抽出
             operating_venues = self._extract_venues_from_races(races)
             logger.info(f"現在時刻: {now.strftime('%H:%M:%S')}")
             logger.info(f"{period}のレースが存在するレース場: {operating_venues}")
@@ -153,7 +197,7 @@ class EnsembleModel:
             race_number = getattr(race, "race_number", 1)
             place = getattr(race, "place", None) or getattr(race, "venue", "不明")
 
-            predicted_order = _make_prediction_order(race_number, weather)
+            predicted_order = _make_prediction_order(weather, water_cond)
             confidence = _confidence_from_conditions(weather, water_cond, hour)
 
             reason = _WEATHER_REASONS.get(weather, "")
