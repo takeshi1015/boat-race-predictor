@@ -96,8 +96,12 @@ class BoatraceDataFetcher:
 
         logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
 
-        # すべての21会場のレースを生成
-        races = self._generate_all_venues_races(target_date)
+        # 開催会場を取得（boatrace.jp の月間スケジュールから）
+        active_venue_codes = self._fetch_active_venues(target_date)
+        logger.info(f"📊 開催会場: {len(active_venue_codes)}場")
+
+        # 開催会場のレースを生成
+        races = self._generate_all_venues_races(target_date, active_venue_codes)
         logger.info(f"📊 合計 {len(races)}件のレースを取得")
 
         return races
