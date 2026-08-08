@@ -263,7 +263,7 @@ class EnsembleModel:
             return None
 
     def _get_race_data(self, period: str) -> list:
-        """データベースからレースデータを取得"""
+        """データベースからレースデータを取得。DBが空の場合は当日の合成レースを自動生成して返す。"""
         try:
             from database.db_manager import get_db_manager
             db = get_db_manager()
@@ -274,11 +274,33 @@ class EnsembleModel:
                 else:
                     target_date = datetime.now() + timedelta(days=1)
                 races = db.get_races_by_date(session, target_date)
-                return list(races)
+                if not races:
+                    # DB にレースがない場合は合成データを自動生成して DB に保存する
+                    logger.info(f"{period} のレースデータが DB に存在しないため合成データを生成します")
+                    from scripts.init_test_data import create_today_races
+                    races = create_today_races(session, db, target_date, num_races=10, create_predictions=True)
+                    logger.info(f"合成レースデータ {len(races)} 件を生成しました")
+                # セッションを閉じる前に必要な属性をすべて読み込んでおく
+                # (セッション切断後の DetachedInstanceError を防ぐため)
+                detached = []
+                for race in races:
+                    import types
+                    obj = types.SimpleNamespace(
+                        race_id=race.race_id,
+                        date=race.date,
+                        venue=race.venue,
+                        place=race.place,
+                        race_number=race.race_number,
+                        weather=race.weather,
+                        water_condition=race.water_condition,
+                        start_time_hour=race.start_time_hour,
+                    )
+                    detached.append(obj)
+                return detached
             finally:
                 session.close()
         except Exception as e:
-            logger.error(f"レースデータ取得エラー: {e}")
+            logger.error(f"レースデータ取得エラー: {e}", exc_info=True)
             return []
 
     def evaluate_performance(self) -> dict:

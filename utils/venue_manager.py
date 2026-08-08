@@ -44,10 +44,12 @@ class VenueManager:
         "若松": {"code": "22", "name_jp": "若松"},
     }
 
-    # 開催情報の初期値（公式サイト取得失敗時のフォールバック）
-    FIXED_SCHEDULE = {
-        "2026-08-02": ["桐生", "多摩川", "浜名湖", "常滑", "びわこ", "尼崎", "丸亀", "児島", "若松", "芦屋", "福岡", "唐津"],
-    }
+    # 開催情報のデフォルト会場リスト（公式サイト取得失敗時のフォールバック）
+    # 日付に依存せず常にこのリストを使用する
+    DEFAULT_VENUES = [
+        "桐生", "多摩川", "浜名湖", "常滑", "びわこ",
+        "尼崎", "丸亀", "児島", "若松", "芦屋", "福岡", "唐津",
+    ]
 
     def __init__(self):
         self.cache_file = "venue_schedule.json"
@@ -91,15 +93,9 @@ class VenueManager:
         except Exception as e:
             logger.debug(f"DB抽出失敗: {e}")
 
-        # 4. 開催情報の初期値（最終フォールバック）
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        if today_str in self.FIXED_SCHEDULE:
-            operating = self.FIXED_SCHEDULE[today_str]
-            logger.warning(f"⚠️ 開催情報の初期値から取得: {operating}")
-            return operating
-
-        logger.warning("❌ 開催場所情報を取得できません")
-        return []
+        # 4. デフォルト会場リストを使用（最終フォールバック）
+        logger.warning(f"⚠️ 開催場所をデフォルトリストから取得: {self.DEFAULT_VENUES}")
+        return list(self.DEFAULT_VENUES)
 
     def get_operating_venues_tomorrow(self):
         """翌日開催中のレース場を取得"""
@@ -125,14 +121,9 @@ class VenueManager:
         except Exception as e:
             logger.debug(f"翌日DB抽出失敗: {e}")
 
-        # 3. 開催情報の初期値（最終フォールバック）
-        tomorrow_str = tomorrow.strftime("%Y-%m-%d")
-        if tomorrow_str in self.FIXED_SCHEDULE:
-            operating = self.FIXED_SCHEDULE[tomorrow_str]
-            logger.warning(f"⚠️ 翌日開催情報の初期値: {operating}")
-            return operating
-
-        return []
+        # 3. デフォルト会場リストを使用（最終フォールバック）
+        logger.warning(f"⚠️ 翌日開催情報をデフォルトリストから取得: {self.DEFAULT_VENUES}")
+        return list(self.DEFAULT_VENUES)
 
     def _fetch_from_official_site(self, target_date=None):
         """ボートレース公式サイトからスクレイピング"""

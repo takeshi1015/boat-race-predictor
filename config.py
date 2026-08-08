@@ -33,6 +33,16 @@ REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "30"))
 SCRAPER_RETRY_COUNT = int(os.getenv("SCRAPER_RETRY_COUNT", "3"))
 SCRAPER_RETRY_DELAY = int(os.getenv("SCRAPER_RETRY_DELAY", "5"))
 
+# Aliases used by scraper/boat_race_scraper.py
+BOATRACE_BASE_URL = SCRAPER_BASE_URL
+BOATRACE_SCHEDULE_URL = SCRAPER_BASE_URL + "/race/schedule"
+USER_AGENT = os.getenv(
+    "USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+)
+MAX_RETRIES = SCRAPER_RETRY_COUNT
+RETRY_BACKOFF = SCRAPER_RETRY_DELAY
+
 # ==================== PREDICTION SETTINGS ====================
 HIGH_CONFIDENCE_RACES = int(os.getenv("HIGH_CONFIDENCE_RACES", "5"))
 HIGH_ODDS_RACES = int(os.getenv("HIGH_ODDS_RACES", "5"))

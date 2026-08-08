@@ -149,41 +149,32 @@ def _make_prediction(race_id: str, date: datetime, race_weather: str, race_water
 
 
 def create_today_races(session, db, target_date: datetime, num_races: int = 10, create_predictions: bool = False) -> list:
-    """当日のレースデータを作成（全24場から10場をランダム選択、現在時刻より30分以上後のレースのみ）"""
-    now = datetime.now()
-    
+    """当日のレースデータを作成（全24場から10場をランダム選択）"""
     # 全24場からランダムに選択
     venues_today = random.sample(ALL_VENUES, min(num_races, len(ALL_VENUES)))
-    
-    # 現在時刻より30分以上後のレースを生成
+
+    now = datetime.now()
     current_hour = now.hour
-    current_minute = now.minute
-    
-    # 最初のレースは30分以上後
-    if current_minute < 30:
-        start_hour = current_hour + 1  # 次の時間の00分
+
+    # 現在時刻の翌時間以降のレースを生成。深夜で翌時間が 24 以上の場合は
+    # 標準的な昼間の時間帯をフォールバックとして使用する。
+    start_hour = current_hour + 1
+    if start_hour < 24:
+        hours = [h for h in range(start_hour, min(start_hour + num_races, 24))]
+        # 不足分はランダムで補完
+        while len(hours) < num_races:
+            hours.append(random.randint(start_hour, 23))
     else:
-        start_hour = current_hour + 1  # 次の時間の00分
-    
-    # 生成するレース時刻（現在時刻の30分以上後）
-    hours = []
-    for i in range(num_races):
-        race_hour = start_hour + i
-        if race_hour < 24:  # 同日内のみ
-            hours.append(race_hour)
-    
-    # 時刻が不足する場合はランダムに生成
-    while len(hours) < num_races:
-        hours.append(random.randint(start_hour, 23))
-    
+        # 23時台以降は当日中に購入可能なレースを生成できないため
+        # 代わりに標準的な昼間の時間帯で生成する
+        daytime = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+        hours = (daytime * ((num_races // len(daytime)) + 1))[:num_races]
+
     hours = hours[:num_races]
     
     created = []
     for i, venue in enumerate(venues_today):
-        if i < len(hours):
-            hour = hours[i]
-        else:
-            hour = random.randint(start_hour, 23)
+        hour = hours[i] if i < len(hours) else hours[-1]
         
         race_data = _make_race(target_date, venue, i + 1, hour)
         # 既存チェック
