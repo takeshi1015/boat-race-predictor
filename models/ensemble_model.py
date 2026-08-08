@@ -4,6 +4,7 @@
 """
 
 import random
+import types
 from datetime import datetime, timedelta
 from itertools import permutations
 
@@ -284,7 +285,6 @@ class EnsembleModel:
                 # (セッション切断後の DetachedInstanceError を防ぐため)
                 detached = []
                 for race in races:
-                    import types
                     obj = types.SimpleNamespace(
                         race_id=race.race_id,
                         date=race.date,

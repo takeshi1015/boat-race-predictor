@@ -156,18 +156,18 @@ def create_today_races(session, db, target_date: datetime, num_races: int = 10, 
     now = datetime.now()
     current_hour = now.hour
 
-    # 現在時刻の翌時間以降のレースを生成。深夜で翌時間が 24 以上の場合は
-    # 標準的な昼間の時間帯をフォールバックとして使用する。
+    # 現在時刻の翌時間以降のレースを生成。残り時間が少ない（start_hour >= 23）か
+    # 翌時間が 24 以上の場合は標準的な昼間の時間帯をフォールバックとして使用する。
     start_hour = current_hour + 1
-    if start_hour < 24:
+    daytime = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+    if start_hour < 23:
         hours = [h for h in range(start_hour, min(start_hour + num_races, 24))]
         # 不足分はランダムで補完
         while len(hours) < num_races:
             hours.append(random.randint(start_hour, 23))
     else:
-        # 23時台以降は当日中に購入可能なレースを生成できないため
-        # 代わりに標準的な昼間の時間帯で生成する
-        daytime = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+        # 23時台以降（または22時台でほぼ時間がない場合）は当日中に購入可能な
+        # レースを生成できないため、標準的な昼間の時間帯で生成する
         hours = (daytime * ((num_races // len(daytime)) + 1))[:num_races]
 
     hours = hours[:num_races]
