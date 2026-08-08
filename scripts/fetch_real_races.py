@@ -102,6 +102,10 @@ class BoatraceDataFetcher:
 
         return races
 
+    def generate_test_races_for_date(self, target_date: datetime, venue_codes: list = None) -> list:
+        """ネットワーク不要のテスト用レースデータを生成"""
+        return self._generate_all_venues_races(target_date, venue_codes)
+
     def _fetch_active_venues(self, target_date: datetime) -> list:
         """boatrace.jp から指定日に開催される会場コードのリストを取得"""
         active_codes = []
@@ -254,7 +258,7 @@ def ensure_races_for_date(target_date: datetime) -> list:
         session.close()
 
     fetcher = BoatraceDataFetcher()
-    saved_count = save_races_to_db(fetcher._generate_all_venues_races(target_date))
+    saved_count = save_races_to_db(fetcher.generate_test_races_for_date(target_date))
     logger.info(
         "📦 %s のレースデータを自動補完: %s件",
         target_date.strftime("%Y-%m-%d"),
