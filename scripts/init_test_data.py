@@ -133,8 +133,8 @@ def _make_prediction(race_id: str, date: datetime, race_weather: str, race_water
     }
 
 
-def create_today_races(session, db, target_date: datetime, num_races: int = 10) -> list:
-    """当日のレースデータを作成（全24場から10場をランダム選択、現在時刻より30分以上後のレースのみ）"""
+def create_today_races(session, db, target_date: datetime, num_races: int = 10, create_predictions: bool = False) -> list:
+    """当日のレー��データを作成（全24場から10場をランダム選択、現在時刻より30分以上後のレースのみ）"""
     now = datetime.now()
     
     # 全24場からランダムに選択
@@ -180,6 +180,19 @@ def create_today_races(session, db, target_date: datetime, num_races: int = 10) 
             session.add(race)
             session.flush()
             created.append(race)
+        
+        # 当日の場合は予測も生成
+        if create_predictions:
+            pred_data = _make_prediction(
+                race_data["race_id"],
+                target_date,
+                race_data["weather"],
+                race_data["water_condition"],
+                hour
+            )
+            pred = Prediction(**pred_data)
+            session.add(pred)
+    
     session.commit()
     return created
 
@@ -238,10 +251,10 @@ def main():
         today = datetime.now()
         tomorrow = today + timedelta(days=1)
 
-        # 当日レース（全24場からランダム選択）
+        # 当日レース（全24場からランダム選択）+ 予測
         print("📅 当日レースデータを作成中...")
         print(f"   現在時刻: {today.strftime('%H:%M:%S')}")
-        today_races = create_today_races(session, db, today, num_races=10)
+        today_races = create_today_races(session, db, today, num_races=10, create_predictions=True)
         print(f"  ✅ 当日レース: {len(today_races)}件")
         for r in today_races:
             place = r.place or r.venue or "?"
@@ -251,7 +264,7 @@ def main():
         # 翌日レース
         print()
         print("📅 翌日レースデータを作成中...")
-        tomorrow_races = create_today_races(session, db, tomorrow, num_races=10)
+        tomorrow_races = create_today_races(session, db, tomorrow, num_races=10, create_predictions=True)
         print(f"  ✅ 翌日レース: {len(tomorrow_races)}件")
 
         # 過去30日間データ
