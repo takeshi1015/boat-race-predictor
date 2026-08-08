@@ -378,6 +378,62 @@ def get_tomorrow_races() -> Response:
 
 
 # ---------------------------------------------------------------------------
+# POST /api/races/<race_id>/result
+# ---------------------------------------------------------------------------
+@api_bp.route("/races/<string:race_id>/result", methods=["POST"])
+def submit_race_result(race_id: str) -> Response:
+    """Record actual race result and compare against prediction."""
+    body = request.get_json(silent=True) or {}
+    actual_order = body.get("actual_order")
+    actual_odds = body.get("actual_odds")
+
+    if not isinstance(actual_order, list) or len(actual_order) < 3:
+        return jsonify({"error": "actual_order は3着以上の配列で指定してください"}), 400
+    if actual_odds is None:
+        return jsonify({"error": "actual_odds を指定してください"}), 400
+
+    try:
+        from database.db_manager import get_db_manager
+        db = get_db_manager()
+        session = db.get_session()
+        try:
+            result = db.update_prediction_result_by_race_id(
+                session=session,
+                race_id=race_id,
+                actual_order=[int(x) for x in actual_order[:3]],
+                actual_odds=float(actual_odds),
+            )
+            if not result:
+                return jsonify({"error": "指定レースの予測が見つかりません"}), 404
+            return jsonify(result), 200
+        finally:
+            session.close()
+    except Exception as exc:
+        logger.error("Submit race result failed: %s", exc, exc_info=True)
+        return jsonify({"error": "結果登録に失敗しました"}), 500
+
+
+# ---------------------------------------------------------------------------
+# GET /api/races/accuracy
+# ---------------------------------------------------------------------------
+@api_bp.route("/races/accuracy", methods=["GET"])
+def get_race_accuracy() -> Response:
+    """Return 30-day confidence/accuracy calibration metrics."""
+    try:
+        from database.db_manager import get_db_manager
+        db = get_db_manager()
+        session = db.get_session()
+        try:
+            analysis = db.analyze_accuracy(session=session, days=30)
+            return jsonify(analysis), 200
+        finally:
+            session.close()
+    except Exception as exc:
+        logger.error("Race accuracy analysis failed: %s", exc, exc_info=True)
+        return jsonify({"error": "統計情報の取得に失敗しました"}), 500
+
+
+# ---------------------------------------------------------------------------
 # GET /api/analysis
 # ---------------------------------------------------------------------------
 @api_bp.route("/analysis", methods=["GET"])

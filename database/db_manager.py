@@ -162,6 +162,30 @@ class DatabaseManager:
         return session.query(Prediction).filter(
             Prediction.prediction_date >= cutoff_date
         ).all()
+
+    def upsert_prediction_by_race_id(
+        self,
+        session: Session,
+        race_id: str,
+        prediction_data: Dict[str, Any],
+    ) -> Optional[Prediction]:
+        """Create or update latest prediction for a race_id."""
+        if not race_id:
+            return None
+
+        prediction = session.query(Prediction).filter_by(race_id=race_id).order_by(
+            Prediction.prediction_date.desc()
+        ).first()
+        if prediction:
+            for key, value in prediction_data.items():
+                if hasattr(prediction, key):
+                    setattr(prediction, key, value)
+            prediction.updated_at = datetime.now()
+        else:
+            prediction = Prediction(race_id=race_id, **prediction_data)
+            session.add(prediction)
+        session.commit()
+        return prediction
     
     def update_prediction_result(
         self,
@@ -176,6 +200,113 @@ class DatabaseManager:
             prediction.updated_at = datetime.now()
             session.commit()
         return prediction
+
+    def update_prediction_result_by_race_id(
+        self,
+        session: Session,
+        race_id: str,
+        actual_order: List[int],
+        actual_odds: float,
+    ) -> Optional[Dict[str, Any]]:
+        """Update a race prediction with actual results and return summary."""
+        prediction = session.query(Prediction).filter(
+            Prediction.race_id == race_id
+        ).order_by(Prediction.prediction_date.desc()).first()
+        if not prediction:
+            return None
+
+        predicted = (prediction.predicted_order or [])[:3]
+        actual = (actual_order or [])[:3]
+        is_hit = predicted == actual and len(actual) == 3
+        confidence = float(prediction.confidence or 0.0)
+
+        if is_hit and confidence < 0.70:
+            confidence_assessment = "underestimated"
+        elif (not is_hit) and confidence >= 0.70:
+            confidence_assessment = "overestimated"
+        else:
+            confidence_assessment = "calibrated"
+
+        prediction.result = {
+            "is_hit": is_hit,
+            "actual_odds": float(actual_odds),
+            "actual_order": actual_order,
+            "confidence_assessment": confidence_assessment,
+        }
+        prediction.updated_at = datetime.now()
+        session.commit()
+
+        return {
+            "race_id": race_id,
+            "predicted_order": predicted,
+            "actual_order": actual,
+            "is_hit": is_hit,
+            "odds": float(actual_odds),
+            "confidence": confidence,
+            "confidence_assessment": confidence_assessment,
+        }
+
+    def analyze_accuracy(self, session: Session, days: int = 30) -> Dict[str, Any]:
+        """Analyze confidence calibration accuracy for recent predictions."""
+        cutoff_date = datetime.now() - timedelta(days=days)
+        predictions = session.query(Prediction).filter(
+            Prediction.prediction_date >= cutoff_date
+        ).all()
+
+        confidence_groups = {
+            "50-60": [],
+            "60-70": [],
+            "70-80": [],
+            "80-90": [],
+            "90+": [],
+        }
+        assessed_count = 0
+        under = 0
+        over = 0
+
+        for pred in predictions:
+            if not pred.result:
+                continue
+            result = pred.result or {}
+            if "is_hit" not in result:
+                continue
+
+            conf = float(pred.confidence or 0.0)
+            is_hit = bool(result.get("is_hit", False))
+            assessed_count += 1
+
+            assessment = result.get("confidence_assessment")
+            if assessment == "underestimated":
+                under += 1
+            elif assessment == "overestimated":
+                over += 1
+
+            if conf < 0.60:
+                confidence_groups["50-60"].append(is_hit)
+            elif conf < 0.70:
+                confidence_groups["60-70"].append(is_hit)
+            elif conf < 0.80:
+                confidence_groups["70-80"].append(is_hit)
+            elif conf < 0.90:
+                confidence_groups["80-90"].append(is_hit)
+            else:
+                confidence_groups["90+"].append(is_hit)
+
+        accuracy_by_confidence: Dict[str, Dict[str, Any]] = {}
+        for group, hits in confidence_groups.items():
+            if hits:
+                accuracy_by_confidence[group] = {
+                    "accuracy": sum(hits) / len(hits),
+                    "sample_size": len(hits),
+                }
+
+        return {
+            "period_days": days,
+            "assessed_predictions": assessed_count,
+            "underestimated_count": under,
+            "overestimated_count": over,
+            "accuracy_by_confidence": accuracy_by_confidence,
+        }
     
     # ============================================================================
     # Performance Operations
