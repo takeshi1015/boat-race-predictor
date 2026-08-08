@@ -202,16 +202,13 @@ class EnsembleModel:
 
     def _get_race_data(self, period: str) -> list:
         """データベースからレースデータを取得"""
+        target_date = datetime.now() if period == "today" else datetime.now() + timedelta(days=1)
         try:
             from database.db_manager import get_db_manager
             from scripts.fetch_real_races import ensure_races_for_date
             db = get_db_manager()
             session = db.get_session()
             try:
-                if period == "today":
-                    target_date = datetime.now()
-                else:
-                    target_date = datetime.now() + timedelta(days=1)
                 races = db.get_races_by_date(session, target_date)
                 if races:
                     return list(races)
