@@ -80,6 +80,7 @@ class BoatraceDataFetcher:
             target_date = datetime.now()
 
         logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
+        logger.info(f"⏰ 現在時刻: {datetime.now().strftime('%H:%M')}")
 
         # 開催会場を取得
         active_venues = self.fetch_active_venues(target_date)
@@ -162,8 +163,9 @@ class BoatraceDataFetcher:
                     )
 
                     # ⭐️ 重要：現在時刻より後のレースのみ取得
+                    # 厳密な比較: race_datetime > now
                     if race_datetime <= now:
-                        logger.debug(f"  スキップ（既終了）: {venue_name} {race_num}R ({hour:02d}:{minute:02d})")
+                        logger.debug(f"  スキップ（既終了）: {venue_name} {race_num}R ({hour:02d}:{minute:02d}) (現在時刻: {now.strftime('%H:%M')})")
                         continue
 
                     race_data = {
@@ -262,9 +264,11 @@ def main():
     print(f"   当日: {saved_today}件")
     print(f"   翌日: {saved_tomorrow}件")
     print()
-    print("次のコマンドで予想を実行してください：")
-    print("  python main.py --mode predict-today")
-    print("  python main.py --mode predict-tomorrow")
+    if saved_today > 0:
+        print("次のコマンドで予想を実行してください：")
+        print("  python main.py --mode predict-today")
+    if saved_tomorrow > 0:
+        print("  python main.py --mode predict-tomorrow")
     print("━" * 60)
     print()
 
