@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 import logging
 import time
+import re
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -37,7 +38,6 @@ class BoatraceDataFetcher:
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         })
-        self.session.timeout = 30
 
     def fetch_races_for_date(self, target_date: datetime = None) -> list:
         """指定日のレースデータを公式サイトから取得"""
@@ -54,9 +54,9 @@ class BoatraceDataFetcher:
             try:
                 venue_races = self._fetch_races_for_venue(target_date, venue_code, venue_name)
                 races.extend(venue_races)
-                time.sleep(1)  # サーバー負荷軽減のため1秒待機
+                time.sleep(0.5)  # サーバー負荷軽減のため0.5秒待機
             except Exception as e:
-                logger.warning(f"  {venue_name} データ取得エラー: {e}")
+                logger.debug(f"  {venue_name} データ取得エラー: {e}")
                 continue
 
         logger.info(f"📊 合計 {len(races)}件のレースを取得")
@@ -68,8 +68,7 @@ class BoatraceDataFetcher:
         date_str = target_date.strftime("%Y%m%d")
 
         try:
-            # 会場別の開催日程ページから実レース時刻を取得
-            # https://www.boatrace.jp/owpc/pc/race/index?hd=YYYYMMDD&jcd=XX
+            # 会場別の開催日程ページからレース時刻を取得
             url = f"https://www.boatrace.jp/owpc/pc/race/index?hd={date_str}&jcd={venue_code}"
             
             response = self.session.get(url, timeout=30)
@@ -81,71 +80,102 @@ class BoatraceDataFetcher:
 
             soup = BeautifulSoup(response.content, "html.parser")
 
-            # レース情報を含むテーブルを探す
-            # boatrace.jpの実際のHTML構造に基づいて調整
-            race_rows = soup.find_all("a", {"data-race-id": True})
-            
-            if not race_rows:
-                # 別のセレクタを試す
-                race_rows = soup.find_all("div", class_="race-num")
-
-            if not race_rows:
+            # テーブルを取得
+            table = soup.find("table")
+            if not table:
                 logger.info(f"  ℹ️  {venue_name}: 本日の開催なし")
                 return races
 
-            # レース情報を抽出
-            for race_elem in race_rows[:12]:  # 最大12レースまで
+            rows = table.find_all("tr")
+            if not rows:
+                logger.info(f"  ℹ️  {venue_name}: 本日の開催なし")
+                return races
+
+            # テーブルの行を解析
+            # 奇数行がレース情報、偶数行が時刻情報
+            i = 1  # ヘッダーをスキップ
+            while i < len(rows) - 1:
                 try:
-                    # レース番号と時刻を抽出
-                    race_text = race_elem.get_text(strip=True)
+                    # レース情報行から R 数を抽出
+                    race_row = rows[i]
+                    race_cells = race_row.find_all(["td", "th"])
                     
-                    # "1" や "2" など単一の数字を探す
-                    if race_text.isdigit():
-                        race_num = int(race_text)
-                        
-                        # 時刻情報を親要素から抽出
-                        parent = race_elem.parent
-                        time_text = parent.find("span", class_="time") if parent else None
-                        
-                        if time_text:
-                            time_str = time_text.get_text(strip=True)
-                            # "12:15" 形式を解析
-                            if ":" in time_str:
-                                try:
-                                    hour, minute = map(int, time_str.split(":"))
-                                    
-                                    race_datetime = target_date.replace(
-                                        hour=hour, minute=minute, second=0, microsecond=0
-                                    )
+                    if not race_cells:
+                        i += 2
+                        continue
 
-                                    race_data = {
-                                        "race_id": f"{date_str}_{venue_code}_{race_num:02d}",
-                                        "date": race_datetime,
-                                        "venue": venue_name,
-                                        "place": venue_name,
-                                        "race_number": race_num,
-                                        "weather": "sunny",
-                                        "water_condition": "calm",
-                                        "water_surface": "calm",
-                                        "start_time_hour": hour,
-                                        "time_of_day": "morning" if hour < 12 else ("midday" if hour < 17 else "evening"),
-                                        "number_of_boats": 6,
-                                        "wind_speed": 0.0,
-                                        "temperature": 25.0,
-                                        "humidity": 60.0,
-                                    }
+                    # R数を抽出（例：「10R」から「10」を取得）
+                    race_text = ""
+                    for cell in race_cells:
+                        cell_text = cell.get_text(strip=True)
+                        if "R" in cell_text:
+                            race_text = cell_text
+                            break
 
-                                    races.append(race_data)
-                                    logger.info(f"  ✅ {venue_name} {race_num}R ({hour:02d}:{minute:02d})")
+                    if not race_text or "R" not in race_text:
+                        i += 2
+                        continue
 
-                                except ValueError:
-                                    continue
+                    race_num_match = re.search(r"(\d+)R", race_text)
+                    if not race_num_match:
+                        i += 2
+                        continue
+
+                    race_num = int(race_num_match.group(1))
+
+                    # 次の行から時刻を抽出
+                    time_row = rows[i + 1]
+                    time_cells = time_row.find_all(["td", "th"])
+                    
+                    if not time_cells:
+                        i += 2
+                        continue
+
+                    # 最初のセルから時刻を取得
+                    time_text = time_cells[0].get_text(strip=True)
+                    
+                    # "HH:MM" 形式をパース
+                    time_match = re.search(r"(\d{1,2}):(\d{2})", time_text)
+                    if not time_match:
+                        i += 2
+                        continue
+
+                    hour = int(time_match.group(1))
+                    minute = int(time_match.group(2))
+
+                    race_datetime = target_date.replace(
+                        hour=hour, minute=minute, second=0, microsecond=0
+                    )
+
+                    race_data = {
+                        "race_id": f"{date_str}_{venue_code}_{race_num:02d}",
+                        "date": race_datetime,
+                        "venue": venue_name,
+                        "place": venue_name,
+                        "race_number": race_num,
+                        "weather": "sunny",
+                        "water_condition": "calm",
+                        "water_surface": "calm",
+                        "start_time_hour": hour,
+                        "time_of_day": "morning" if hour < 12 else ("midday" if hour < 17 else "evening"),
+                        "number_of_boats": 6,
+                        "wind_speed": 0.0,
+                        "temperature": 25.0,
+                        "humidity": 60.0,
+                    }
+
+                    races.append(race_data)
+                    logger.info(f"  ✅ {venue_name} {race_num}R ({hour:02d}:{minute:02d})")
+
+                    i += 2
+
                 except Exception as e:
                     logger.debug(f"  レース抽出エラー: {e}")
+                    i += 2
                     continue
 
         except Exception as e:
-            raise Exception(f"{venue_name} 取得失敗: {str(e)}")
+            logger.debug(f"  {venue_name} 取得失敗: {str(e)}")
 
         return races
 
@@ -198,7 +228,7 @@ def main():
 
     fetcher = BoatraceDataFetcher()
 
-    # 当日のレースを取得
+    # 当日のレースを���得
     today = datetime.now()
     today_races = fetcher.fetch_races_for_date(today)
     saved_today = save_races_to_db(today_races)
