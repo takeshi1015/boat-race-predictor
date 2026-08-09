@@ -2,6 +2,7 @@
 
 import json
 import os
+from datetime import datetime, timedelta, timezone
 import pytest
 
 from app import create_app
@@ -30,6 +31,15 @@ def test_dashboard_loads(client):
     """GET / should return the web dashboard with HTTP 200."""
     response = client.get("/")
     assert response.status_code == 200
+
+
+def test_predictions_today_page_uses_closing_soon_section(client):
+    """Today's predictions page should classify closing-soon races instead of past races."""
+    response = client.get("/predictions/today")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "購入締切間近" in body
+    assert "終了したレース" not in body
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +79,75 @@ def test_api_models_info(client):
     assert response.status_code == 200
     data = json.loads(response.data)
     assert "models" in data
+
+
+def test_api_today_races_filters_past_and_sets_status(client, monkeypatch):
+    """GET /api/races/today should only return future races with purchase status."""
+    import api.routes as api_routes
+    import models.ensemble_model as ensemble_model
+
+    fixed_now = datetime(2026, 8, 9, 12, 2, 0, tzinfo=timezone(timedelta(hours=9)))
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now if tz is None else fixed_now.astimezone(tz)
+
+    class DummyEnsembleModel:
+        def predict_today(self):
+            return [
+                {
+                    "race_id": "past-race",
+                    "race_number": 1,
+                    "date": (fixed_now - timedelta(minutes=1)).replace(tzinfo=None).isoformat(),
+                    "confidence": 0.91,
+                },
+                {
+                    "race_id": "closing-soon-race",
+                    "race_number": 2,
+                    "date": (fixed_now + timedelta(minutes=4)).replace(tzinfo=None).isoformat(),
+                    "confidence": 0.73,
+                },
+                {
+                    "race_id": "available-race",
+                    "race_number": 3,
+                    "date": (fixed_now + timedelta(minutes=20)).replace(tzinfo=None).isoformat(),
+                    "confidence": 0.88,
+                },
+                {
+                    "race_id": "aware-available-race",
+                    "race_number": 4,
+                    "date": (fixed_now + timedelta(minutes=35)).replace(
+                        tzinfo=timezone(timedelta(hours=9))
+                    ).isoformat(),
+                    "confidence": 0.61,
+                },
+            ]
+
+    monkeypatch.setattr(api_routes, "datetime", FixedDateTime)
+    monkeypatch.setattr(ensemble_model, "EnsembleModel", DummyEnsembleModel)
+
+    response = client.get("/api/races/today")
+    assert response.status_code == 200
+    data = json.loads(response.data)
+
+    assert data["date"] == "2026-08-09"
+    assert data["count"] == 3
+
+    race_ids = [prediction["race_id"] for prediction in data["predictions"]]
+    assert "past-race" not in race_ids
+    assert race_ids == ["closing-soon-race", "available-race", "aware-available-race"]
+
+    statuses = {prediction["race_id"]: prediction for prediction in data["predictions"]}
+    assert statuses["closing-soon-race"]["status"] == "購入締切間近"
+    assert statuses["closing-soon-race"]["is_closing_soon"] is True
+    assert statuses["closing-soon-race"]["is_purchasable"] is False
+    assert statuses["available-race"]["status"] == "購入可能"
+    assert statuses["available-race"]["is_closing_soon"] is False
+    assert statuses["available-race"]["is_purchasable"] is True
+    assert statuses["aware-available-race"]["status"] == "購入可能"
+    assert statuses["aware-available-race"]["is_closing_soon"] is False
+    assert statuses["aware-available-race"]["is_purchasable"] is True
 
 
 def test_export_json(client):

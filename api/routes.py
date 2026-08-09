@@ -8,6 +8,7 @@ All endpoints are registered on the ``api`` Blueprint defined in
 import json
 from datetime import datetime
 from typing import Any, Dict
+from zoneinfo import ZoneInfo
 
 from flask import Response, jsonify, request
 
@@ -66,6 +67,9 @@ MODEL_INFO: Dict[str, Dict[str, Any]] = {
         "type": "ensemble",
     },
 }
+
+RACE_TICKET_CUTOFF_MINUTES = 5
+JST = ZoneInfo("Asia/Tokyo")
 
 # ---------------------------------------------------------------------------
 # Minimal sample race data used when no race data has been persisted yet
@@ -340,15 +344,56 @@ def get_today_races() -> Response:
     try:
         from models.ensemble_model import EnsembleModel
         model = EnsembleModel()
-        predictions = model.predict_today()
+        now = datetime.now(JST)
+        predictions = [
+            enriched
+            for pred in model.predict_today()
+            if (enriched := _enrich_today_prediction(pred, now)) is not None
+        ]
         return jsonify({
-            "date": datetime.now().strftime("%Y-%m-%d"),
+            "date": now.strftime("%Y-%m-%d"),
             "count": len(predictions),
             "predictions": predictions,
         })
     except Exception as exc:
         logger.error("Today race predictions failed: %s", exc, exc_info=True)
         return jsonify({"error": "予測の取得に失敗しました", "predictions": []}), 500
+
+
+def _parse_prediction_race_datetime(prediction: Dict[str, Any]) -> datetime | None:
+    """Parse a prediction's race datetime if present."""
+    date_value = prediction.get("date")
+    if not date_value:
+        return None
+    if isinstance(date_value, datetime):
+        return date_value if date_value.tzinfo else date_value.replace(tzinfo=JST)
+    if isinstance(date_value, str):
+        try:
+            parsed = datetime.fromisoformat(date_value)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=JST)
+        except ValueError:
+            return None
+    return None
+
+
+def _enrich_today_prediction(prediction: Dict[str, Any], now: datetime) -> Dict[str, Any] | None:
+    """Add purchase status metadata and remove races that already started."""
+    race_datetime = _parse_prediction_race_datetime(prediction)
+    if race_datetime is None:
+        return None
+
+    if race_datetime <= now:
+        return None
+
+    seconds_until_race = int((race_datetime - now).total_seconds())
+    is_closing_soon = seconds_until_race <= RACE_TICKET_CUTOFF_MINUTES * 60
+
+    enriched = dict(prediction)
+    enriched["seconds_until_race"] = seconds_until_race
+    enriched["is_closing_soon"] = is_closing_soon
+    enriched["is_purchasable"] = not is_closing_soon
+    enriched["status"] = "購入締切間近" if is_closing_soon else "購入可能"
+    return enriched
 
 
 # ---------------------------------------------------------------------------
