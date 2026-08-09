@@ -78,13 +78,19 @@ class BoatraceDataFetcher:
             logger.warning(f"開催会場取得エラー: {e}")
             return []
 
-    def fetch_races_for_date(self, target_date: datetime = None) -> list:
-        """指定日のレースデータを公式サイトから取得（未開始レースのみ）"""
+    def fetch_races_for_date(self, target_date: datetime = None, is_tomorrow: bool = False) -> list:
+        """指定日のレースデータを公式サイトから取得（未開始レースのみ）
+        
+        Args:
+            target_date: 対象日付
+            is_tomorrow: 翌日の場合True（この場合、全てのレースを取得）
+        """
         if target_date is None:
             # 日本時間で現在時刻を取得
             target_date = datetime.now(JST).replace(tzinfo=None)
 
-        logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
+        day_label = "翌日" if is_tomorrow else "本日"
+        logger.info(f"📥 {day_label} {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
         
         # 日本時間で現在時刻を取得（ナイーブな datetime オブジェクト）
         now_jst = datetime.now(JST).replace(tzinfo=None)
@@ -100,18 +106,26 @@ class BoatraceDataFetcher:
         for venue_code in active_venues:
             try:
                 venue_name = self.VENUES[venue_code]
-                venue_races = self._fetch_races_for_venue(target_date, venue_code, venue_name, now_jst)
+                venue_races = self._fetch_races_for_venue(target_date, venue_code, venue_name, now_jst, is_tomorrow)
                 races.extend(venue_races)
                 time.sleep(0.3)  # サーバー負荷軽減
             except Exception as e:
                 logger.warning(f"  {venue_name} データ取得エラー: {e}")
                 continue
 
-        logger.info(f"📊 合計 {len(races)}件のレースを取得")
+        logger.info(f"📊 {day_label}: 合計 {len(races)}件のレースを取得")
         return races
 
-    def _fetch_races_for_venue(self, target_date: datetime, venue_code: str, venue_name: str, now_jst: datetime) -> list:
-        """指定会場のレースデータを取得（終了したレースは除外）"""
+    def _fetch_races_for_venue(self, target_date: datetime, venue_code: str, venue_name: str, now_jst: datetime, is_tomorrow: bool = False) -> list:
+        """指定会場のレースデータを取得（終了したレースは除外）
+        
+        Args:
+            target_date: 対象日付
+            venue_code: 会場コード
+            venue_name: 会場名
+            now_jst: 現在時刻（日本時間）
+            is_tomorrow: 翌日の場合True（この場合、全てのレースを取得）
+        """
         races = []
         date_str = target_date.strftime("%Y%m%d")
 
@@ -131,12 +145,12 @@ class BoatraceDataFetcher:
             # テーブルを取得
             table = soup.find("table")
             if not table:
-                logger.info(f"  ℹ️  {venue_name}: 本日の開催なし")
+                logger.debug(f"  ℹ️  {venue_name}: 本日の開催なし")
                 return races
 
             rows = table.find_all("tr")
             if len(rows) < 3:
-                logger.info(f"  ℹ️  {venue_name}: 本日の開催なし")
+                logger.debug(f"  ℹ️  {venue_name}: 本日の開催なし")
                 return races
 
             # 行2以降がレース情報
@@ -169,8 +183,9 @@ class BoatraceDataFetcher:
                         hour=hour, minute=minute, second=0, microsecond=0
                     )
 
-                    # ⭐️ 重要：現在時刻（日本時間）より後のレースのみ取得
-                    if race_datetime <= now_jst:
+                    # ⭐️ 当日：現在時刻より後のレースのみ取得
+                    # ⭐️ 翌日：全てのレースを取得
+                    if not is_tomorrow and race_datetime <= now_jst:
                         logger.debug(f"  スキップ（既終了）: {venue_name} {race_num}R ({hour:02d}:{minute:02d}) (現在時刻: {now_jst.strftime('%H:%M:%S')})")
                         continue
 
@@ -254,14 +269,15 @@ def main():
 
     # 当日のレースを取得（日本時間）
     today_jst = datetime.now(JST).replace(tzinfo=None)
-    today_races = fetcher.fetch_races_for_date(today_jst)
+    today_races = fetcher.fetch_races_for_date(today_jst, is_tomorrow=False)
     saved_today = save_races_to_db(today_races)
 
     print()
 
     # 翌日のレースを取得（日本時間）
+    # 翌日は全てのレースを取得
     tomorrow_jst = today_jst + timedelta(days=1)
-    tomorrow_races = fetcher.fetch_races_for_date(tomorrow_jst)
+    tomorrow_races = fetcher.fetch_races_for_date(tomorrow_jst, is_tomorrow=True)
     saved_tomorrow = save_races_to_db(tomorrow_races)
 
     print()
