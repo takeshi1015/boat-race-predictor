@@ -7,8 +7,6 @@ or via the CLI:
     python main.py --mode web
 """
 
-import os
-
 from flask import Flask, render_template
 from flask_cors import CORS
 
@@ -16,22 +14,27 @@ import config
 from api import api_bp
 from utils.logger import logger
 
+_DB_SCHEMA_INITIALIZED = False
 _APP_DATA_INITIALIZED = False
 _DATA_REFRESH_SCHEDULER = None
 
 
 def initialize_application_data(force_refresh: bool = False) -> None:
     """Initialize DB schema and bootstrap race data."""
-    global _APP_DATA_INITIALIZED
-
-    if _APP_DATA_INITIALIZED and not force_refresh:
-        return
+    global _DB_SCHEMA_INITIALIZED, _APP_DATA_INITIALIZED
 
     try:
-        from database.db_manager import init_db
+        if not _DB_SCHEMA_INITIALIZED:
+            from database.db_manager import init_db
+
+            init_db()
+            _DB_SCHEMA_INITIALIZED = True
+
+        if _APP_DATA_INITIALIZED and not force_refresh:
+            return
+
         from scripts.fetch_real_races import fetch_and_store_races
 
-        init_db()
         summary = fetch_and_store_races()
         logger.info("Race data bootstrap completed: %s", summary)
         _APP_DATA_INITIALIZED = True
@@ -43,7 +46,7 @@ def start_data_refresh_scheduler() -> None:
     """Start an hourly background refresh for race data."""
     global _DATA_REFRESH_SCHEDULER
 
-    if _DATA_REFRESH_SCHEDULER is not None or os.getenv("PYTEST_CURRENT_TEST"):
+    if _DATA_REFRESH_SCHEDULER is not None:
         return
 
     try:

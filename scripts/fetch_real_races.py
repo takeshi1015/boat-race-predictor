@@ -269,12 +269,13 @@ def fetch_and_store_races(
 
     for label, target_date in target_dates.items():
         races = fetcher.fetch_races_for_date(target_date)
+        source = fetcher.last_fetch_source
         saved = save_races_to_db(races)
         summary[label] = {
             "date": target_date.strftime("%Y-%m-%d"),
             "fetched": len(races),
             "saved": saved,
-            "source": fetcher.last_fetch_source,
+            "source": source,
         }
 
     return summary
