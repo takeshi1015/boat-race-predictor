@@ -58,7 +58,7 @@ class BoatraceDataFetcher:
         "唐津": "20",
         "大村": "21",
     }
-    VENUES = dict(PRIMARY_VENUES)
+    VENUES = {**PRIMARY_VENUES, **{code: name for name, code in LEGACY_VENUE_CODE_BY_NAME.items()}}
 
     def __init__(self):
         self.session = requests.Session()
@@ -149,13 +149,8 @@ class BoatraceDataFetcher:
             return None
 
         odds = self._fetch_odds(venue_code, race_number, target_date)
-        venue_name = self.PRIMARY_VENUES.get(venue_code)
-        if not venue_name:
-            for name, code in self.LEGACY_VENUE_CODE_BY_NAME.items():
-                if code == venue_code:
-                    venue_name = name
-                    break
-        venue_name = venue_name or f"会場{venue_code}"
+        venue_name = self.VENUES.get(venue_code, f"会場{venue_code}")
+        water_condition = self._parse_water_condition(soup)
 
         return {
             "race_id": f"{target_date.strftime('%Y%m%d')}_{venue_code}_{race_number:02d}",
@@ -164,8 +159,8 @@ class BoatraceDataFetcher:
             "place": venue_name,
             "race_number": race_number,
             "weather": self._parse_weather(soup),
-            "water_condition": self._parse_water_condition(soup),
-            "water_surface": self._parse_water_condition(soup),
+            "water_condition": water_condition,
+            "water_surface": water_condition,
             "start_time_hour": race_datetime.hour,
             "time_of_day": self._time_of_day(race_datetime.hour),
             "number_of_boats": len(participants),
@@ -315,7 +310,7 @@ def save_races_to_db(races: list) -> int:
     session = db.get_session()
 
     try:
-        saved_count = 0
+        upserted_count = 0
         for race_data in races:
             try:
                 existing = db.get_race(session, race_data["race_id"])
@@ -325,14 +320,14 @@ def save_races_to_db(races: list) -> int:
                             setattr(existing, key, value)
                 else:
                     session.add(Race(**race_data))
-                saved_count += 1
+                upserted_count += 1
             except Exception as e:
                 logger.debug(f"レース保存エラー: {e}")
                 session.rollback()
 
         session.commit()
-        logger.info(f"✅ {saved_count}件のレースをDBに保存")
-        return saved_count
+        logger.info(f"✅ {upserted_count}件のレースをDBに保存/更新")
+        return upserted_count
 
     except Exception as e:
         logger.error(f"DB保存エラー: {e}")
@@ -342,7 +337,7 @@ def save_races_to_db(races: list) -> int:
         session.close()
 
 
-def archive_completed_races(now: Optional[datetime] = None) -> int:
+def archive_completed_races(now: Optional[datetime] = None, completion_grace_minutes: int = 15) -> int:
     """終了レースを履歴状態へ更新."""
     now = now or datetime.now()
     db = get_db_manager()
@@ -353,7 +348,8 @@ def archive_completed_races(now: Optional[datetime] = None) -> int:
         for race in races:
             race_result = race.result if isinstance(race.result, dict) else {}
             status = race_result.get("status")
-            if race.date and race.date <= now and status != "completed":
+            completion_time = race.date + timedelta(minutes=completion_grace_minutes) if race.date else None
+            if completion_time and completion_time <= now and status != "completed":
                 race_result["status"] = "completed"
                 race.result = race_result
                 archived += 1

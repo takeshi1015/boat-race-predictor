@@ -269,10 +269,11 @@ def get_today_races() -> Response:
     try:
         from database.db_manager import get_db_manager
 
+        now = datetime.now()
         db = get_db_manager()
         session = db.get_session()
         try:
-            races = db.get_races_by_date(session, datetime.now())
+            races = db.get_races_by_date(session, now)
             rows = []
             for race in races:
                 race_result = race.result if isinstance(race.result, dict) else {}
@@ -292,7 +293,7 @@ def get_today_races() -> Response:
         finally:
             session.close()
         return jsonify({
-            "date": datetime.now().strftime("%Y-%m-%d"),
+            "date": now.strftime("%Y-%m-%d"),
             "count": len(rows),
             "races": rows,
         })
@@ -307,6 +308,7 @@ def get_today_predictions() -> Response:
     try:
         from models.ensemble_model import EnsembleModel
 
+        now = datetime.now()
         model = EnsembleModel()
         predictions = model.predict_today()
         message = None
@@ -314,7 +316,7 @@ def get_today_predictions() -> Response:
             message = "本日の開催レースが取得できませんでした"
         return jsonify(
             {
-                "date": datetime.now().strftime("%Y-%m-%d"),
+                "date": now.strftime("%Y-%m-%d"),
                 "count": len(predictions),
                 "predictions": predictions,
                 "message": message,
