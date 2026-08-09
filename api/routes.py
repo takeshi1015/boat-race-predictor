@@ -8,6 +8,7 @@ All endpoints are registered on the ``api`` Blueprint defined in
 import json
 from datetime import datetime
 from typing import Any, Dict
+from zoneinfo import ZoneInfo
 
 from flask import Response, jsonify, request
 
@@ -68,6 +69,7 @@ MODEL_INFO: Dict[str, Dict[str, Any]] = {
 }
 
 RACE_TICKET_CUTOFF_MINUTES = 5
+JST = ZoneInfo("Asia/Tokyo")
 
 # ---------------------------------------------------------------------------
 # Minimal sample race data used when no race data has been persisted yet
@@ -342,7 +344,7 @@ def get_today_races() -> Response:
     try:
         from models.ensemble_model import EnsembleModel
         model = EnsembleModel()
-        now = datetime.now()
+        now = datetime.now(JST)
         predictions = [
             enriched
             for pred in model.predict_today()
@@ -364,10 +366,11 @@ def _parse_prediction_race_datetime(prediction: Dict[str, Any]) -> datetime | No
     if not date_value:
         return None
     if isinstance(date_value, datetime):
-        return date_value
+        return date_value if date_value.tzinfo else date_value.replace(tzinfo=JST)
     if isinstance(date_value, str):
         try:
-            return datetime.fromisoformat(date_value)
+            parsed = datetime.fromisoformat(date_value)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=JST)
         except ValueError:
             return None
     return None
@@ -379,14 +382,10 @@ def _enrich_today_prediction(prediction: Dict[str, Any], now: datetime) -> Dict[
     if race_datetime is None:
         return None
 
-    comparison_now = now
-    if race_datetime.tzinfo is not None and race_datetime.utcoffset() is not None:
-        comparison_now = now.replace(tzinfo=race_datetime.tzinfo)
-
-    if race_datetime <= comparison_now:
+    if race_datetime <= now:
         return None
 
-    seconds_until_race = int((race_datetime - comparison_now).total_seconds())
+    seconds_until_race = int((race_datetime - now).total_seconds())
     is_closing_soon = seconds_until_race <= RACE_TICKET_CUTOFF_MINUTES * 60
 
     enriched = dict(prediction)

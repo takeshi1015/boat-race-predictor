@@ -86,12 +86,12 @@ def test_api_today_races_filters_past_and_sets_status(client, monkeypatch):
     import api.routes as api_routes
     import models.ensemble_model as ensemble_model
 
-    fixed_now = datetime(2026, 8, 9, 12, 2, 0)
+    fixed_now = datetime(2026, 8, 9, 12, 2, 0, tzinfo=timezone(timedelta(hours=9)))
 
     class FixedDateTime(datetime):
         @classmethod
         def now(cls, tz=None):
-            return fixed_now
+            return fixed_now if tz is None else fixed_now.astimezone(tz)
 
     class DummyEnsembleModel:
         def predict_today(self):
@@ -99,19 +99,19 @@ def test_api_today_races_filters_past_and_sets_status(client, monkeypatch):
                 {
                     "race_id": "past-race",
                     "race_number": 1,
-                    "date": (fixed_now - timedelta(minutes=1)).isoformat(),
+                    "date": (fixed_now - timedelta(minutes=1)).replace(tzinfo=None).isoformat(),
                     "confidence": 0.91,
                 },
                 {
                     "race_id": "closing-soon-race",
                     "race_number": 2,
-                    "date": (fixed_now + timedelta(minutes=4)).isoformat(),
+                    "date": (fixed_now + timedelta(minutes=4)).replace(tzinfo=None).isoformat(),
                     "confidence": 0.73,
                 },
                 {
                     "race_id": "available-race",
                     "race_number": 3,
-                    "date": (fixed_now + timedelta(minutes=20)).isoformat(),
+                    "date": (fixed_now + timedelta(minutes=20)).replace(tzinfo=None).isoformat(),
                     "confidence": 0.88,
                 },
                 {
