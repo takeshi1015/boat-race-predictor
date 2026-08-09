@@ -79,6 +79,13 @@ function formatTimeRemaining(seconds) {
   return `${min}分${sec}秒`;
 }
 
+function updateRaceCounts() {
+  document.getElementById("available-count").textContent =
+    document.querySelectorAll(".race-item.available").length;
+  document.getElementById("closing-soon-count").textContent =
+    document.querySelectorAll(".race-item.closing-soon").length;
+}
+
 function createRaceCard(pred, category) {
   const order = (pred.predicted_order || []).join("-") || "-";
   const conf = pred.confidence || 0;
@@ -189,10 +196,6 @@ async function loadPredictions() {
     
     const closingSoon = predictions.filter(p => p.is_closing_soon);
     
-    // 統計情報を更新
-    document.getElementById("available-count").textContent = highConf.length + highOdds.length;
-    document.getElementById("closing-soon-count").textContent = closingSoon.length;
-
     if (highConf.length === 0 && highOdds.length === 0 && closingSoon.length === 0) {
       highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-warning">当日のレースデータがありません</div></div>`;
       highOddsContainer.innerHTML = "";
@@ -228,6 +231,8 @@ async function loadPredictions() {
         closingSoonContainer.appendChild(createRaceCard(pred, "closing_soon"));
       });
     }
+
+    updateRaceCounts();
 
   } catch (e) {
     highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-danger">データ読み込みエラー: ${e.message}</div></div>`;
@@ -275,6 +280,7 @@ setInterval(() => {
       el.classList.remove("closing-soon");
     }
   });
+  updateRaceCounts();
 }, 1000);
 
 document.addEventListener("DOMContentLoaded", loadPredictions);
