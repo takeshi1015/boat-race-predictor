@@ -182,6 +182,8 @@ class BoatraceDataFetcher:
                 race_data = {
                     "race_id": f"{target_date.strftime('%Y%m%d')}_{venue_code}_{race_num:02d}",
                     "date": race_date,
+                    # race_time stores the exact start datetime (race_date already has hour/minute set)
+                    "race_time": race_date,
                     "venue": venue_name,
                     "place": venue_name,
                     "race_number": race_num,
