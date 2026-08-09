@@ -14,6 +14,56 @@ import config
 from api import api_bp
 from utils.logger import logger
 
+# フラグ：起動時処理が既に完了しているか
+_startup_done = False
+
+
+def _init_database() -> None:
+    """データベーススキーマを自動作成する"""
+    try:
+        from database.db_manager import get_db_manager
+        get_db_manager()
+        logger.info("✅ データベーススキーマを初期化しました")
+    except Exception as exc:
+        logger.error("データベース初期化エラー: %s", exc)
+
+
+def _fetch_real_races() -> None:
+    """boatrace.jp から本日のレースデータを自動取得してDBに保存する"""
+    try:
+        from scripts.fetch_real_races import BoatraceDataFetcher, save_races_to_db
+        from datetime import datetime
+
+        fetcher = BoatraceDataFetcher()
+        today = datetime.now()
+        races = fetcher.fetch_races_for_date(today)
+        saved = save_races_to_db(races)
+        logger.info("✅ 本日のレースデータを取得・保存しました: %d件", saved)
+    except Exception as exc:
+        logger.error("レースデータ取得エラー: %s", exc)
+
+
+def _start_hourly_updater() -> None:
+    """バックグラウンドで1時間ごとにレースデータを自動更新する"""
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.interval import IntervalTrigger
+
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(
+            _fetch_real_races,
+            IntervalTrigger(hours=1),
+            id="hourly_race_fetch",
+            name="1時間ごとレース取得",
+            replace_existing=True,
+        )
+        scheduler.start()
+        logger.info("✅ 1時間ごとの自動更新スケジューラーを開始しました")
+    except ImportError:
+        logger.warning("APScheduler が利用できないため自動更新は無効です")
+    except Exception as exc:
+        logger.error("自動更新スケジューラー開始エラー: %s", exc)
+
 
 def create_app() -> Flask:
     """Create and configure the Flask application.
@@ -29,6 +79,14 @@ def create_app() -> Flask:
 
     # Register the REST API blueprint
     app.register_blueprint(api_bp)
+
+    # データベースの自動初期化・レース取得は初回起動時のみ実行
+    global _startup_done
+    if not _startup_done:
+        _startup_done = True
+        _init_database()
+        _fetch_real_races()
+        _start_hourly_updater()
 
     # -----------------------------------------------------------------------
     # Web dashboard routes
