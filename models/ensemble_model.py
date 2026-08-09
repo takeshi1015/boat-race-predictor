@@ -274,6 +274,20 @@ class EnsembleModel:
                 else:
                     target_date = datetime.now() + timedelta(days=1)
                 races = db.get_races_by_date(session, target_date)
+                races = list(races)
+                if races:
+                    return races
+            finally:
+                session.close()
+
+            logger.info("%sのレースデータが空のため、自動取得を実行します", period)
+            from scripts.fetch_real_races import fetch_and_store_races
+
+            fetch_and_store_races()
+
+            session = db.get_session()
+            try:
+                races = db.get_races_by_date(session, target_date)
                 return list(races)
             finally:
                 session.close()

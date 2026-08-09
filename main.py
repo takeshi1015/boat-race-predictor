@@ -211,7 +211,7 @@ def _show_usage() -> None:
     print("     → http://localhost:5000/ でアクセス")
     print()
     print("【初回セットアップ】")
-    print("  python scripts/init_test_data.py")
+    print("  不要です。起動時にDB初期化とレースデータ取得を自動実行します")
     print()
     print("【説明】")
     print("  - 信頼度 0.7 以上が購入可能な予想です")
@@ -301,9 +301,10 @@ def _run_web_server() -> None:
     Imports the Flask application from app.py and starts the development
     server with debug mode enabled.
     """
-    from app import create_app
+    from app import create_app, start_data_refresh_scheduler
 
     flask_app = create_app()
+    start_data_refresh_scheduler()
     logger.info("Starting Flask web server at http://localhost:%d", config.WEB_PORT)
     flask_app.run(
         host=config.WEB_HOST,
@@ -414,4 +415,3 @@ def _run_all_models_demo(export: Optional[Literal["json", "csv", "all"]] = None)
 
 if __name__ == "__main__":
     main()
-

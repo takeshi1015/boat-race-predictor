@@ -38,7 +38,7 @@ def _display_predictions(predictions: list, title: str, target_date: datetime = 
 
     if not predictions:
         print("  予測データがありません。")
-        print("  python scripts/init_test_data.py でテストデータを追加してください。")
+        print("  レースデータ自動取得を実行中です。しばらくして再度お試しください。")
         print()
         return
 
@@ -104,6 +104,7 @@ class TaskScheduler:
             logger.error("APScheduler がインストールされていません")
             return
 
+        self._refresh_race_data()
         self._schedule_tasks()
         self._scheduler.start()
         logger.info("タスクスケジューラーを開始しました")
@@ -240,6 +241,18 @@ class TaskScheduler:
             logger.error(f"統計情報エラー: {e}", exc_info=True)
             print(f"❌ 統計情報取得エラー: {e}")
 
+    def _refresh_race_data(self):
+        """実レースデータを取得してDBを更新"""
+        try:
+            from scripts.fetch_real_races import fetch_and_store_races
+
+            summary = fetch_and_store_races()
+            logger.info("レースデータ更新完了: %s", summary)
+            return summary
+        except Exception as e:
+            logger.error(f"レースデータ更新エラー: {e}", exc_info=True)
+            return {}
+
     # ------------------------------------------------------------------
     # Scheduled tasks (continuous mode)
     # ------------------------------------------------------------------
@@ -276,6 +289,15 @@ class TaskScheduler:
             CronTrigger(hour=eval_h, minute=eval_m),
             id="evaluate_performance",
             name="パフォーマンス評価タスク",
+            replace_existing=True,
+        )
+
+        self._scheduler.add_job(
+            self._refresh_race_data,
+            "interval",
+            hours=1,
+            id="refresh_race_data",
+            name="レースデータ更新タスク",
             replace_existing=True,
         )
 

@@ -159,8 +159,8 @@ async function loadPredictions() {
         <div class="col-12">
           <div class="alert alert-warning">
             <i class="bi bi-exclamation-triangle me-2"></i>
-            翌日のレースデータがありません。<br>
-            <code>python scripts/init_test_data.py</code> を実行してテストデータを追加してください。
+            翌日のレースデータがまだ取得できていません。<br>
+            サーバーは自動取得を再試行し、取得失敗時はモックデータを使用します。
           </div>
         </div>`;
       mediumConfContainer.innerHTML = "";
