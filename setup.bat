@@ -43,11 +43,11 @@ echo 完了！
 
 echo.
 
-REM テストデータの初期化
-echo [4/4] テストデータを初期化中...
-python scripts/init_test_data.py
+REM 実レースデータの初期取得
+echo [4/4] 実レースデータを取得中...
+python scripts/fetch_real_races.py
 if errorlevel 1 (
-    echo エラー: テストデータの初期化に失敗しました
+    echo エラー: 実レースデータの取得に失敗しました
     pause
     exit /b 1
 )

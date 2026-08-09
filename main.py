@@ -210,9 +210,6 @@ def _show_usage() -> None:
     print("     python main.py --mode run-server")
     print("     → http://localhost:5000/ でアクセス")
     print()
-    print("【初回セットアップ】")
-    print("  python scripts/init_test_data.py")
-    print()
     print("【説明】")
     print("  - 信頼度 0.7 以上が購入可能な予想です")
     print("  - 毎日自動的に前日の結果から学習します")
@@ -414,4 +411,3 @@ def _run_all_models_demo(export: Optional[Literal["json", "csv", "all"]] = None)
 
 if __name__ == "__main__":
     main()
-
