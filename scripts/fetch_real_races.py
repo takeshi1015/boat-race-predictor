@@ -1,12 +1,13 @@
 """
 ボートレース公式サイトから実レースデータを取得するスクリプト
 全会場の当日・翌日のレースを取得（終了したレースは除外）
+日本時間（JST）で判定
 """
 
 import sys
 import os
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from bs4 import BeautifulSoup
 import logging
 import time
@@ -19,6 +20,9 @@ from database.models import Race
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# 日本時間（JST）のタイムゾーン
+JST = timezone(timedelta(hours=9))
 
 
 class BoatraceDataFetcher:
@@ -77,10 +81,14 @@ class BoatraceDataFetcher:
     def fetch_races_for_date(self, target_date: datetime = None) -> list:
         """指定日のレースデータを公式サイトから取得（未開始レースのみ）"""
         if target_date is None:
-            target_date = datetime.now()
+            # 日本時間で現在時刻を取得
+            target_date = datetime.now(JST).replace(tzinfo=None)
 
         logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
-        logger.info(f"⏰ 現在時刻: {datetime.now().strftime('%H:%M')}")
+        
+        # 日本時間で現在時刻を取得（ナイーブな datetime オブジェクト）
+        now_jst = datetime.now(JST).replace(tzinfo=None)
+        logger.info(f"⏰ 現在時刻（日本時間）: {now_jst.strftime('%H:%M:%S')}")
 
         # 開催会場を取得
         active_venues = self.fetch_active_venues(target_date)
@@ -92,7 +100,7 @@ class BoatraceDataFetcher:
         for venue_code in active_venues:
             try:
                 venue_name = self.VENUES[venue_code]
-                venue_races = self._fetch_races_for_venue(target_date, venue_code, venue_name)
+                venue_races = self._fetch_races_for_venue(target_date, venue_code, venue_name, now_jst)
                 races.extend(venue_races)
                 time.sleep(0.3)  # サーバー負荷軽減
             except Exception as e:
@@ -102,11 +110,10 @@ class BoatraceDataFetcher:
         logger.info(f"📊 合計 {len(races)}件のレースを取得")
         return races
 
-    def _fetch_races_for_venue(self, target_date: datetime, venue_code: str, venue_name: str) -> list:
+    def _fetch_races_for_venue(self, target_date: datetime, venue_code: str, venue_name: str, now_jst: datetime) -> list:
         """指定会場のレースデータを取得（終了したレースは除外）"""
         races = []
         date_str = target_date.strftime("%Y%m%d")
-        now = datetime.now()
 
         try:
             # 正確なエンドポイント: /owpc/pc/race/raceindex
@@ -162,10 +169,9 @@ class BoatraceDataFetcher:
                         hour=hour, minute=minute, second=0, microsecond=0
                     )
 
-                    # ⭐️ 重要：現在時刻より後のレースのみ取得
-                    # 厳密な比較: race_datetime > now
-                    if race_datetime <= now:
-                        logger.debug(f"  スキップ（既終了）: {venue_name} {race_num}R ({hour:02d}:{minute:02d}) (現在時刻: {now.strftime('%H:%M')})")
+                    # ⭐️ 重要：現在時刻（日本時間）より後のレースのみ取得
+                    if race_datetime <= now_jst:
+                        logger.debug(f"  スキップ（既終了）: {venue_name} {race_num}R ({hour:02d}:{minute:02d}) (現在時刻: {now_jst.strftime('%H:%M:%S')})")
                         continue
 
                     race_data = {
@@ -246,16 +252,16 @@ def main():
 
     fetcher = BoatraceDataFetcher()
 
-    # 当日のレースを取得
-    today = datetime.now()
-    today_races = fetcher.fetch_races_for_date(today)
+    # 当日のレースを取得（日本時間）
+    today_jst = datetime.now(JST).replace(tzinfo=None)
+    today_races = fetcher.fetch_races_for_date(today_jst)
     saved_today = save_races_to_db(today_races)
 
     print()
 
-    # 翌日のレースを取得
-    tomorrow = today + timedelta(days=1)
-    tomorrow_races = fetcher.fetch_races_for_date(tomorrow)
+    # 翌日のレースを取得（日本時間）
+    tomorrow_jst = today_jst + timedelta(days=1)
+    tomorrow_races = fetcher.fetch_races_for_date(tomorrow_jst)
     saved_tomorrow = save_races_to_db(tomorrow_races)
 
     print()
