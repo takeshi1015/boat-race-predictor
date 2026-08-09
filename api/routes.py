@@ -6,7 +6,7 @@ All endpoints are registered on the ``api`` Blueprint defined in
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict
 
 from flask import Response, jsonify, request
@@ -145,6 +145,39 @@ def _build_results_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
         "models": sorted(raw.keys()),
         "predictions": raw,
     }
+
+
+def _serialize_race(race: Any) -> Dict[str, Any]:
+    """Convert a Race ORM object into JSON-safe data."""
+    date_val = getattr(race, "date", None)
+    return {
+        "race_id": getattr(race, "race_id", None),
+        "date": date_val.isoformat() if hasattr(date_val, "isoformat") else date_val,
+        "venue": getattr(race, "venue", None),
+        "place": getattr(race, "place", None),
+        "race_number": getattr(race, "race_number", None),
+        "weather": getattr(race, "weather", None),
+        "water_condition": getattr(race, "water_condition", None),
+        "water_surface": getattr(race, "water_surface", None),
+        "wind_speed": getattr(race, "wind_speed", None),
+        "temperature": getattr(race, "temperature", None),
+        "humidity": getattr(race, "humidity", None),
+        "number_of_boats": getattr(race, "number_of_boats", None),
+        "start_time_hour": getattr(race, "start_time_hour", None),
+        "time_of_day": getattr(race, "time_of_day", None),
+        "result": getattr(race, "result", None),
+    }
+
+
+def _get_target_date(period: str) -> datetime:
+    return datetime.now() if period == "today" else datetime.now() + timedelta(days=1)
+
+
+def _get_period_predictions(period: str) -> list:
+    from models.ensemble_model import EnsembleModel
+
+    model = EnsembleModel()
+    return model.predict_today() if period == "today" else model.predict_tomorrow()
 
 
 # ---------------------------------------------------------------------------
@@ -332,23 +365,23 @@ def health_check() -> Response:
 # ---------------------------------------------------------------------------
 @api_bp.route("/races/today", methods=["GET"])
 def get_today_races() -> Response:
-    """Return today's race predictions from the database.
+    """Return today's race data from the database.
 
     Returns:
-        JSON array of race predictions.
+        JSON array of races.
     """
     try:
-        from models.ensemble_model import EnsembleModel
-        model = EnsembleModel()
-        predictions = model.predict_today()
+        from scripts.fetch_real_races import ensure_race_data
+
+        races = ensure_race_data(_get_target_date("today"))
         return jsonify({
             "date": datetime.now().strftime("%Y-%m-%d"),
-            "count": len(predictions),
-            "predictions": predictions,
+            "count": len(races),
+            "races": [_serialize_race(race) for race in races],
         })
     except Exception as exc:
-        logger.error("Today race predictions failed: %s", exc, exc_info=True)
-        return jsonify({"error": "予測の取得に失敗しました", "predictions": []}), 500
+        logger.error("Today race fetch failed: %s", exc, exc_info=True)
+        return jsonify({"error": "当日レースの取得に失敗しました", "races": []}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -356,16 +389,46 @@ def get_today_races() -> Response:
 # ---------------------------------------------------------------------------
 @api_bp.route("/races/tomorrow", methods=["GET"])
 def get_tomorrow_races() -> Response:
-    """Return tomorrow's race predictions from the database.
+    """Return tomorrow's race data from the database.
 
     Returns:
-        JSON array of race predictions.
+        JSON array of races.
     """
     try:
-        from datetime import timedelta
-        from models.ensemble_model import EnsembleModel
-        model = EnsembleModel()
-        predictions = model.predict_tomorrow()
+        from scripts.fetch_real_races import ensure_race_data
+
+        tomorrow = datetime.now() + timedelta(days=1)
+        races = ensure_race_data(_get_target_date("tomorrow"))
+        return jsonify({
+            "date": tomorrow.strftime("%Y-%m-%d"),
+            "count": len(races),
+            "races": [_serialize_race(race) for race in races],
+        })
+    except Exception as exc:
+        logger.error("Tomorrow race fetch failed: %s", exc, exc_info=True)
+        return jsonify({"error": "翌日レースの取得に失敗しました", "races": []}), 500
+
+
+@api_bp.route("/predictions/today", methods=["GET"])
+def get_today_predictions() -> Response:
+    """Return today's predictions based on persisted race data."""
+    try:
+        predictions = _get_period_predictions("today")
+        return jsonify({
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "count": len(predictions),
+            "predictions": predictions,
+        })
+    except Exception as exc:
+        logger.error("Today predictions failed: %s", exc, exc_info=True)
+        return jsonify({"error": "当日予測の取得に失敗しました", "predictions": []}), 500
+
+
+@api_bp.route("/predictions/tomorrow", methods=["GET"])
+def get_tomorrow_predictions() -> Response:
+    """Return tomorrow's predictions based on persisted race data."""
+    try:
+        predictions = _get_period_predictions("tomorrow")
         tomorrow = datetime.now() + timedelta(days=1)
         return jsonify({
             "date": tomorrow.strftime("%Y-%m-%d"),
@@ -373,7 +436,7 @@ def get_tomorrow_races() -> Response:
             "predictions": predictions,
         })
     except Exception as exc:
-        logger.error("Tomorrow race predictions failed: %s", exc, exc_info=True)
+        logger.error("Tomorrow predictions failed: %s", exc, exc_info=True)
         return jsonify({"error": "翌日予測の取得に失敗しました", "predictions": []}), 500
 
 

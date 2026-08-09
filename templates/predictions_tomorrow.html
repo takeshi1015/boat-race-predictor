@@ -146,7 +146,7 @@ async function loadPredictions() {
   lowConfContainer.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
 
   try {
-    const res = await fetch("/api/races/tomorrow");
+    const res = await fetch("/api/predictions/tomorrow");
     const data = await res.json();
 
     document.getElementById("tomorrow-date").textContent = data.date ? `${data.date}（翌日）` : "";
@@ -159,8 +159,7 @@ async function loadPredictions() {
         <div class="col-12">
           <div class="alert alert-warning">
             <i class="bi bi-exclamation-triangle me-2"></i>
-            翌日のレースデータがありません。<br>
-            <code>python scripts/init_test_data.py</code> を実行してテストデータを追加してください。
+            翌日の予測データがありません。自動取得を再試行してください。
           </div>
         </div>`;
       mediumConfContainer.innerHTML = "";
