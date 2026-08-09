@@ -240,18 +240,6 @@ class TaskScheduler:
             logger.error(f"統計情報エラー: {e}", exc_info=True)
             print(f"❌ 統計情報取得エラー: {e}")
 
-    def _refresh_race_data(self):
-        """実レースデータを取得してDBを更新"""
-        try:
-            from scripts.fetch_real_races import fetch_and_store_races
-
-            summary = fetch_and_store_races()
-            logger.info("レースデータ更新完了: %s", summary)
-            return summary
-        except Exception as e:
-            logger.error(f"レースデータ更新エラー: {e}", exc_info=True)
-            return {}
-
     # ------------------------------------------------------------------
     # Scheduled tasks (continuous mode)
     # ------------------------------------------------------------------
@@ -288,16 +276,6 @@ class TaskScheduler:
             CronTrigger(hour=eval_h, minute=eval_m),
             id="evaluate_performance",
             name="パフォーマンス評価タスク",
-            replace_existing=True,
-        )
-
-        self._scheduler.add_job(
-            self._refresh_race_data,
-            "interval",
-            hours=1,
-            next_run_time=datetime.now(),
-            id="refresh_race_data",
-            name="レースデータ更新タスク",
             replace_existing=True,
         )
 

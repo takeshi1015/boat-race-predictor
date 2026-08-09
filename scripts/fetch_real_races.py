@@ -212,7 +212,7 @@ class BoatraceDataFetcher:
 
 
 def save_races_to_db(races: list) -> int:
-    """レースデータをDBに保存"""
+    """レースデータをDBに保存し、正常に反映できた件数を返す。"""
     if not races:
         logger.warning("保存するレースがありません")
         return 0
@@ -234,8 +234,7 @@ def save_races_to_db(races: list) -> int:
                             setattr(race, key, value)
 
                     session.add(race)
-                    if existing is None:
-                        saved_count += 1
+                    saved_count += 1
 
             except Exception as e:
                 logger.warning(f"レース保存エラー ({race_data.get('race_id')}): {e}")

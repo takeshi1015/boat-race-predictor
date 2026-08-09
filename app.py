@@ -17,6 +17,7 @@ from api import api_bp
 from utils.logger import logger
 
 _APP_INIT_LOCK = Lock()
+_SCHEDULER_LOCK = Lock()
 _DB_SCHEMA_INITIALIZED = False
 _APP_DATA_INITIALIZED = False
 _DATA_REFRESH_SCHEDULER = None
@@ -50,7 +51,7 @@ def start_data_refresh_scheduler() -> None:
     """Start an hourly background refresh for race data."""
     global _DATA_REFRESH_SCHEDULER
 
-    with _APP_INIT_LOCK:
+    with _SCHEDULER_LOCK:
         if _DATA_REFRESH_SCHEDULER is not None:
             return
 
