@@ -76,6 +76,7 @@ def test_display_predictions_uses_boundary_of_point_seven_for_main_section(capsy
     _display_predictions(predictions, "当日予想", datetime(2026, 8, 9))
 
     output = capsys.readouterr().out
-    main_section = output.split("🎯 🎪 穴確率が高い予想 - 配当狙い")[0]
+    main_section, low_section = output.split("🎯 🎪 穴確率が高い予想 - 配当狙い", maxsplit=1)
+    assert "✅ ✅ 確実性の高い予想 - 本金狙い" in main_section
     assert "桐生競艇場 7レース" in main_section
-    assert "該当する予想はありません。" in output
+    assert "  該当する予想はありません。" in low_section
