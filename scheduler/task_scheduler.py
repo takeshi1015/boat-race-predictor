@@ -104,7 +104,6 @@ class TaskScheduler:
             logger.error("APScheduler がインストールされていません")
             return
 
-        self._refresh_race_data()
         self._schedule_tasks()
         self._scheduler.start()
         logger.info("タスクスケジューラーを開始しました")
@@ -296,6 +295,7 @@ class TaskScheduler:
             self._refresh_race_data,
             "interval",
             hours=1,
+            next_run_time=datetime.now(),
             id="refresh_race_data",
             name="レースデータ更新タスク",
             replace_existing=True,

@@ -256,7 +256,12 @@ def fetch_and_store_races(
     target_dates: Optional[Dict[str, datetime]] = None,
     fetcher: Optional[BoatraceDataFetcher] = None,
 ) -> Dict[str, Dict[str, object]]:
-    """当日・翌日のレースデータを取得してDBへ保存する。"""
+    """当日・翌日のレースデータを取得してDBへ保存する。
+
+    Note:
+        ``fetcher.last_fetch_source`` は ``fetch_races_for_date()`` の呼び出し
+        ごとに更新されるため、各日付の source は取得直後にサマリーへ確定する。
+    """
     if target_dates is None:
         today = datetime.now()
         target_dates = {
