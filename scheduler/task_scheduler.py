@@ -42,37 +42,50 @@ def _display_predictions(predictions: list, title: str, target_date: datetime = 
         print()
         return
 
-    for pred in predictions:
-        place = pred.get("place") or pred.get("venue", "不明")
-        race_number = pred.get("race_number", "?")
-        predicted_order = pred.get("predicted_order") or pred.get("prediction", [])
-        confidence = float(pred.get("confidence", 0.0))
-        reason = pred.get("reason", "")
+    high_confidence = [pred for pred in predictions if float(pred.get("confidence", 0.0)) >= 0.7]
+    low_confidence = [pred for pred in predictions if float(pred.get("confidence", 0.0)) < 0.7]
 
-        # 買い目を "1-2-3" 形式に
-        if isinstance(predicted_order, list) and predicted_order:
-            buy_pattern = "-".join(str(x) for x in predicted_order[:3])
-        elif isinstance(predicted_order, dict):
-            # {1: prob, 2: prob, 3: prob} 形式
-            sorted_keys = sorted(predicted_order, key=lambda k: predicted_order[k], reverse=True)
-            buy_pattern = "-".join(str(k) for k in sorted_keys[:3])
-        else:
-            buy_pattern = "不明"
+    def print_section(section_title: str, section_predictions: list) -> None:
+        print(section_title)
+        if not section_predictions:
+            print("  該当する予想はありません。")
+            print()
+            return
 
-        width = 44
-        border_top = f"┌─ {place}競艇場 {race_number}レース " + "─" * max(1, width - len(f"─ {place}競艇場 {race_number}レース ") - 1) + "┐"
-        border_bot = "└" + "─" * (width + 2) + "┘"
+        for pred in section_predictions:
+            place = pred.get("place") or pred.get("venue", "不明")
+            race_number = pred.get("race_number", "?")
+            predicted_order = pred.get("predicted_order") or pred.get("prediction", [])
+            confidence = float(pred.get("confidence", 0.0))
+            reason = pred.get("reason", "")
 
-        print(border_top)
-        print(f"│ 推奨買い目: {buy_pattern:<34}│")
-        stars_str = _stars(confidence)
-        label = _buy_label(confidence)
-        conf_str = f"{stars_str} {confidence:.2f} ({label})"
-        print(f"│ 信頼度: {conf_str:<36}│")
-        if reason:
-            print(f"│ 理由: {reason:<38}│")
-        print(border_bot)
-        print()
+            # 買い目を "1-2-3" 形式に
+            if isinstance(predicted_order, list) and predicted_order:
+                buy_pattern = "-".join(str(x) for x in predicted_order[:3])
+            elif isinstance(predicted_order, dict):
+                # {1: prob, 2: prob, 3: prob} 形式
+                sorted_keys = sorted(predicted_order, key=lambda k: predicted_order[k], reverse=True)
+                buy_pattern = "-".join(str(k) for k in sorted_keys[:3])
+            else:
+                buy_pattern = "不明"
+
+            width = 44
+            border_top = f"┌─ {place}競艇場 {race_number}レース " + "─" * max(1, width - len(f"─ {place}競艇場 {race_number}レース ") - 1) + "┐"
+            border_bot = "└" + "─" * (width + 2) + "┘"
+
+            print(border_top)
+            print(f"│ 推奨買い目: {buy_pattern:<34}│")
+            stars_str = _stars(confidence)
+            label = _buy_label(confidence)
+            conf_str = f"{stars_str} {confidence:.2f} ({label})"
+            print(f"│ 信頼度: {conf_str:<36}│")
+            if reason:
+                print(f"│ 理由: {reason:<38}│")
+            print(border_bot)
+            print()
+
+    print_section("✅ ✅ 確実性の高い予想 - 本金狙い", high_confidence)
+    print_section("🎯 🎪 穴確率が高い予想 - 配当狙い", low_confidence)
 
 
 class TaskScheduler:
