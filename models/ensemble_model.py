@@ -281,9 +281,9 @@ class EnsembleModel:
                 session.close()
 
             logger.info("%sのレースデータが空のため、自動取得を実行します", period)
-            from scripts.fetch_real_races import fetch_and_store_races
+            from app import initialize_application_data
 
-            fetch_and_store_races()
+            initialize_application_data(force_refresh=False)
 
             session = db.get_session()
             try:
