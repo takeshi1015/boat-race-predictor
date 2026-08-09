@@ -7,6 +7,7 @@ import sys
 import os
 import requests
 from datetime import datetime, timedelta
+from typing import Dict, Optional
 from bs4 import BeautifulSoup
 import logging
 
@@ -88,6 +89,7 @@ class BoatraceDataFetcher:
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
+        self.last_fetch_source = "mock"
 
     def fetch_races_for_date(self, target_date: datetime = None) -> list:
         """指定日のレースデータを公式サイトから取得"""
@@ -96,9 +98,14 @@ class BoatraceDataFetcher:
 
         logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
 
-        # すべての21会場のレースを生成
-        races = self._generate_all_venues_races(target_date)
-        logger.info(f"📊 合計 {len(races)}件のレースを取得")
+        venue_codes = self._fetch_active_venues(target_date)
+        races = self._generate_all_venues_races(target_date, venue_codes)
+
+        if not races:
+            self.last_fetch_source = "mock"
+            races = self._generate_all_venues_races(target_date)
+
+        logger.info(f"📊 合計 {len(races)}件のレースを取得 (source={self.last_fetch_source})")
 
         return races
 
@@ -126,6 +133,7 @@ class BoatraceDataFetcher:
                             active_codes.append(venue_code)
 
                 if active_codes:
+                    self.last_fetch_source = "official"
                     logger.info(f"   ✅ 開催会場 {len(active_codes)}場 を月間スケジュールから取得")
                     return sorted(active_codes)
 
@@ -135,6 +143,7 @@ class BoatraceDataFetcher:
             logger.debug(f"   開催会場取得エラー: {e}")
 
         # フォールバック: 全会場コードを返す
+        self.last_fetch_source = "mock"
         logger.warning("   ⚠️  開催会場取得失敗、全会場にフォールバック")
         return sorted(self.VENUES.keys())
 
@@ -203,7 +212,7 @@ class BoatraceDataFetcher:
 
 
 def save_races_to_db(races: list) -> int:
-    """レースデータをDBに保存"""
+    """レースデータをDBに保存または更新し、反映件数を返す。"""
     if not races:
         logger.warning("保存するレースがありません")
         return 0
@@ -216,21 +225,22 @@ def save_races_to_db(races: list) -> int:
 
         for race_data in races:
             try:
-                existing = db.get_race(session, race_data["race_id"])
-                if existing:
-                    logger.debug(f"スキップ（既存）: {race_data['race_id']}")
-                    continue
+                with session.begin_nested():
+                    existing = db.get_race(session, race_data["race_id"])
+                    race = existing or Race(race_id=race_data["race_id"])
 
-                race = Race(**race_data)
-                session.add(race)
-                saved_count += 1
+                    for key, value in race_data.items():
+                        if hasattr(race, key):
+                            setattr(race, key, value)
+
+                    session.add(race)
+                    saved_count += 1
 
             except Exception as e:
-                logger.debug(f"レース保存エラー: {e}")
-                session.rollback()
+                logger.warning(f"レース保存エラー ({race_data.get('race_id')}): {e}")
 
         session.commit()
-        logger.info(f"✅ {saved_count}件のレースをDBに保存")
+        logger.info(f"✅ {saved_count}件のレースをDBに保存または更新")
         return saved_count
 
     except Exception as e:
@@ -241,6 +251,40 @@ def save_races_to_db(races: list) -> int:
         session.close()
 
 
+def fetch_and_store_races(
+    target_dates: Optional[Dict[str, datetime]] = None,
+    fetcher: Optional[BoatraceDataFetcher] = None,
+) -> Dict[str, Dict[str, object]]:
+    """当日・翌日のレースデータを取得してDBへ保存する。
+
+    Note:
+        ``fetcher.last_fetch_source`` は ``fetch_races_for_date()`` の呼び出し
+        ごとに更新されるため、各日付の source は取得直後にサマリーへ確定する。
+    """
+    if target_dates is None:
+        today = datetime.now()
+        target_dates = {
+            "today": today,
+            "tomorrow": today + timedelta(days=1),
+        }
+
+    fetcher = fetcher or BoatraceDataFetcher()
+    summary: Dict[str, Dict[str, object]] = {}
+
+    for label, target_date in target_dates.items():
+        races = fetcher.fetch_races_for_date(target_date)
+        source = fetcher.last_fetch_source
+        saved = save_races_to_db(races)
+        summary[label] = {
+            "date": target_date.strftime("%Y-%m-%d"),
+            "fetched": len(races),
+            "saved": saved,
+            "source": source,
+        }
+
+    return summary
+
+
 def main():
     print()
     print("━" * 60)
@@ -248,25 +292,13 @@ def main():
     print("━" * 60)
     print()
 
-    fetcher = BoatraceDataFetcher()
-
-    # 当日のレースを取得
-    today = datetime.now()
-    today_races = fetcher.fetch_races_for_date(today)
-    saved_today = save_races_to_db(today_races)
-
-    print()
-
-    # 翌日のレースを取得
-    tomorrow = today + timedelta(days=1)
-    tomorrow_races = fetcher.fetch_races_for_date(tomorrow)
-    saved_tomorrow = save_races_to_db(tomorrow_races)
+    summary = fetch_and_store_races()
 
     print()
     print("━" * 60)
     print("✅ レースデータ取得完了！")
-    print(f"   当日: {saved_today}件")
-    print(f"   翌日: {saved_tomorrow}件")
+    print(f"   当日: {summary['today']['saved']}件保存 ({summary['today']['source']})")
+    print(f"   翌日: {summary['tomorrow']['saved']}件保存 ({summary['tomorrow']['source']})")
     print()
     print("次のコマンドで予想を実行してください：")
     print("  python main.py --mode predict-today")

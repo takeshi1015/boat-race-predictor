@@ -8,7 +8,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.fetch_real_races import BoatraceDataFetcher
+from scripts.fetch_real_races import BoatraceDataFetcher, fetch_and_store_races
 
 
 TARGET_DATE = datetime(2026, 8, 2)
@@ -197,3 +197,26 @@ class TestFetchRacesForDate:
 
         venue_names = {r["venue"] for r in races}
         assert venue_names == set(fetcher.VENUES.values())
+
+
+def test_fetch_and_store_races_returns_summary():
+    class DummyFetcher:
+        def __init__(self):
+            self.last_fetch_source = "official"
+
+        def fetch_races_for_date(self, target_date):
+            self.last_fetch_source = "official" if target_date.day % 2 == 0 else "mock"
+            return [{"race_id": target_date.strftime("%Y%m%d")}]
+
+    target_dates = {
+        "today": datetime(2026, 8, 2),
+        "tomorrow": datetime(2026, 8, 3),
+    }
+
+    with patch("scripts.fetch_real_races.save_races_to_db", side_effect=[1, 1]):
+        summary = fetch_and_store_races(target_dates=target_dates, fetcher=DummyFetcher())
+
+    assert summary["today"]["fetched"] == 1
+    assert summary["today"]["saved"] == 1
+    assert summary["today"]["source"] == "official"
+    assert summary["tomorrow"]["source"] == "mock"

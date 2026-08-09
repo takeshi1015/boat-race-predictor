@@ -7,12 +7,71 @@ or via the CLI:
     python main.py --mode web
 """
 
+from threading import Lock
+
 from flask import Flask, render_template
 from flask_cors import CORS
 
 import config
 from api import api_bp
 from utils.logger import logger
+
+_APP_INIT_LOCK = Lock()
+_SCHEDULER_LOCK = Lock()
+_DB_SCHEMA_INITIALIZED = False
+_APP_DATA_INITIALIZED = False
+_DATA_REFRESH_SCHEDULER = None
+
+
+def initialize_application_data(force_refresh: bool = False) -> None:
+    """Initialize DB schema and bootstrap race data."""
+    global _DB_SCHEMA_INITIALIZED, _APP_DATA_INITIALIZED
+
+    with _APP_INIT_LOCK:
+        try:
+            if not _DB_SCHEMA_INITIALIZED:
+                from database.db_manager import init_db
+
+                init_db()
+                _DB_SCHEMA_INITIALIZED = True
+
+            if _APP_DATA_INITIALIZED and not force_refresh:
+                return
+
+            from scripts.fetch_real_races import fetch_and_store_races
+
+            summary = fetch_and_store_races()
+            logger.info("Race data bootstrap completed: %s", summary)
+            _APP_DATA_INITIALIZED = True
+        except Exception as exc:
+            logger.error("Application bootstrap failed: %s", exc, exc_info=True)
+
+
+def start_data_refresh_scheduler() -> None:
+    """Start an hourly background refresh for race data."""
+    global _DATA_REFRESH_SCHEDULER
+
+    with _SCHEDULER_LOCK:
+        if _DATA_REFRESH_SCHEDULER is not None:
+            return
+
+        try:
+            from apscheduler.schedulers.background import BackgroundScheduler
+
+            scheduler = BackgroundScheduler()
+            scheduler.add_job(
+                initialize_application_data,
+                "interval",
+                hours=1,
+                kwargs={"force_refresh": True},
+                id="refresh-race-data",
+                replace_existing=True,
+            )
+            scheduler.start()
+            _DATA_REFRESH_SCHEDULER = scheduler
+            logger.info("Started hourly race data refresh scheduler")
+        except Exception as exc:
+            logger.error("Failed to start race data scheduler: %s", exc, exc_info=True)
 
 
 def create_app() -> Flask:
@@ -29,6 +88,8 @@ def create_app() -> Flask:
 
     # Register the REST API blueprint
     app.register_blueprint(api_bp)
+
+    initialize_application_data()
 
     # -----------------------------------------------------------------------
     # Web dashboard routes
@@ -89,6 +150,7 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":
     app = create_app()
+    start_data_refresh_scheduler()
     logger.info("Starting Flask server on %s:%d", config.WEB_HOST, config.WEB_PORT)
     app.run(
         host=config.WEB_HOST,

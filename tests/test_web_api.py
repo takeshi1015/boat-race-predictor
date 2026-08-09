@@ -4,6 +4,7 @@ import json
 import os
 import pytest
 
+import app as app_module
 from app import create_app
 
 
@@ -24,6 +25,21 @@ def test_app_starts_without_errors():
     """Flask app should be created without raising any exceptions."""
     app = create_app()
     assert app is not None
+
+
+def test_create_app_initializes_application_data(monkeypatch):
+    """create_app should trigger database/data bootstrap."""
+    calls = []
+    monkeypatch.setattr(
+        app_module,
+        "initialize_application_data",
+        lambda force_refresh=False: calls.append(force_refresh),
+    )
+
+    app = app_module.create_app()
+
+    assert app is not None
+    assert calls == [False]
 
 
 def test_dashboard_loads(client):
