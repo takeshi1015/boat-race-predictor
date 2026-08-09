@@ -52,10 +52,32 @@ class DatabaseManager:
         """Initialize database tables"""
         try:
             Base.metadata.create_all(bind=self.engine)
+            self._migrate_add_race_time()
             logger.info("Database initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing database: {e}")
             raise
+
+    def _migrate_add_race_time(self):
+        """Add race_time column to races table if it does not exist (migration)"""
+        try:
+            with self.engine.connect() as conn:
+                # Check whether the column already exists
+                from sqlalchemy import text, inspect as sa_inspect
+                inspector = sa_inspect(self.engine)
+                columns = [col["name"] for col in inspector.get_columns("races")]
+                if "race_time" not in columns:
+                    conn.execute(text("ALTER TABLE races ADD COLUMN race_time DATETIME"))
+                    conn.commit()
+                    logger.info("Migration: added race_time column to races table")
+                # Always back-fill race_time from date for any rows where it is NULL
+                conn.execute(text(
+                    "UPDATE races SET race_time = date WHERE race_time IS NULL AND date IS NOT NULL"
+                ))
+                conn.commit()
+                logger.info("Migration: back-filled race_time from date column where needed")
+        except Exception as e:
+            logger.warning(f"Migration warning (race_time): {e}")
     
     def get_session(self) -> Session:
         """Get database session"""

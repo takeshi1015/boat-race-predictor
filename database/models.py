@@ -85,6 +85,7 @@ class Race(Base):
     number_of_boats = Column(Integer, default=6)
     time_of_day = Column(String)    # morning, midday, evening
     start_time_hour = Column(Integer, default=0)  # 開始時刻（時）
+    race_time = Column(DateTime, nullable=True, index=True)  # レース開始の正確な日時
     
     # Results
     result = Column(JSON)  # {1st: player_id, 2nd: player_id, 3rd: player_id}

@@ -172,13 +172,20 @@ class EnsembleModel:
             for race in races:
                 # 開催中のレース場のみを処理
                 venue_name = getattr(race, "place", None) or getattr(race, "venue", None)
-                race_datetime = getattr(race, "date", None)
+                race_datetime = getattr(race, "race_time", None) or getattr(race, "date", None)
                 race_num = getattr(race, "race_number", "?")
                 
                 # 開催中か確認
                 if venue_name not in operating_venues:
                     logger.debug(f"❌ {venue_name} {race_num}R - レース場が非開催のため除外")
                     continue
+                
+                # 当日レースは現在時刻より後（購入締め切り5分前以上）のみ対象
+                if period == "today" and isinstance(race_datetime, datetime):
+                    deadline = race_datetime - timedelta(minutes=RACE_TICKET_CUTOFF_MINUTES)
+                    if now > deadline:
+                        logger.debug(f"❌ {venue_name} {race_num}R - 購入締め切り済みのため除外")
+                        continue
                 
                 time_str = race_datetime.strftime('%H:%M') if race_datetime else '?'
                 logger.debug(f"✅ {venue_name} {race_num}R {time_str} - 予測対象")
