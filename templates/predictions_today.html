@@ -89,7 +89,9 @@ function createRaceCard(pred, category) {
   const raceTime = pred.race_time || "?";
   const deadline = pred.purchase_deadline || "?";
   const raceDateTimeIso = pred.date || "";
-  const secondsUntilRace = pred.seconds_until_race || 0;
+  const secondsUntilRace = raceDateTimeIso
+    ? Math.max(0, Math.floor((new Date(raceDateTimeIso) - new Date()) / 1000))
+    : (pred.seconds_until_race || 0);
   const isPurchasable = pred.is_purchasable;
   const statusText = pred.status || (isPurchasable ? "購入可能" : "購入締切間近");
   
