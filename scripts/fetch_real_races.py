@@ -9,6 +9,7 @@ import requests
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 import logging
+from typing import Dict, List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -96,8 +97,8 @@ class BoatraceDataFetcher:
 
         logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
 
-        # すべての21会場のレースを生成
-        races = self._generate_all_venues_races(target_date)
+        venue_codes = self._fetch_active_venues(target_date)
+        races = self._generate_all_venues_races(target_date, venue_codes)
         logger.info(f"📊 合計 {len(races)}件のレースを取得")
 
         return races
@@ -218,11 +219,13 @@ def save_races_to_db(races: list) -> int:
             try:
                 existing = db.get_race(session, race_data["race_id"])
                 if existing:
-                    logger.debug(f"スキップ（既存）: {race_data['race_id']}")
-                    continue
-
-                race = Race(**race_data)
-                session.add(race)
+                    for key, value in race_data.items():
+                        if hasattr(existing, key):
+                            setattr(existing, key, value)
+                    session.add(existing)
+                else:
+                    race = Race(**race_data)
+                    session.add(race)
                 saved_count += 1
 
             except Exception as e:
@@ -237,6 +240,60 @@ def save_races_to_db(races: list) -> int:
         logger.error(f"DB保存エラー: {e}")
         session.rollback()
         return 0
+    finally:
+        session.close()
+
+
+def fetch_and_store_races(target_date: datetime = None) -> int:
+    """指定日のレースデータを取得してDBに保存"""
+    fetcher = BoatraceDataFetcher()
+    races = fetcher.fetch_races_for_date(target_date)
+    return save_races_to_db(races)
+
+
+def refresh_upcoming_races(base_date: datetime = None, days: int = 2) -> Dict[str, int]:
+    """当日以降のレースデータをまとめて更新
+
+    days が 1 未満でも、最低 1 日分（当日分）を更新する。
+    """
+    if base_date is None:
+        base_date = datetime.now()
+
+    refreshed: Dict[str, int] = {}
+    for offset in range(max(days, 1)):
+        target_date = base_date + timedelta(days=offset)
+        date_key = target_date.strftime("%Y-%m-%d")
+        refreshed[date_key] = fetch_and_store_races(target_date)
+
+    return refreshed
+
+
+def ensure_race_data(target_date: datetime = None) -> List[Race]:
+    """指定日のレースデータがDBに存在しなければ取得して返す"""
+    if target_date is None:
+        target_date = datetime.now()
+
+    db = get_db_manager()
+    session = db.get_session()
+    try:
+        races = list(db.get_races_by_date(session, target_date))
+        if races:
+            session.expunge_all()
+            return races
+    finally:
+        session.close()
+
+    try:
+        fetch_and_store_races(target_date)
+    except Exception as e:
+        logger.error(f"レースデータ自動取得エラー: {e}", exc_info=True)
+        return []
+
+    session = db.get_session()
+    try:
+        races = list(db.get_races_by_date(session, target_date))
+        session.expunge_all()
+        return races
     finally:
         session.close()
 

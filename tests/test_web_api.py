@@ -3,6 +3,8 @@
 import json
 import os
 import pytest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from app import create_app
 
@@ -69,6 +71,57 @@ def test_api_models_info(client):
     assert response.status_code == 200
     data = json.loads(response.data)
     assert "models" in data
+
+
+def test_api_races_today_returns_real_races(client):
+    """GET /api/races/today should return persisted race data."""
+    race = SimpleNamespace(
+        race_id="20260809_01_01",
+        date="2026-08-09T08:40:00",
+        venue="桐生",
+        place="桐生",
+        race_number=1,
+        weather="sunny",
+        water_condition="calm",
+        water_surface="calm",
+        wind_speed=2.0,
+        temperature=28.0,
+        humidity=70.0,
+        number_of_boats=6,
+        start_time_hour=8,
+        time_of_day="morning",
+        result=None,
+    )
+    with patch("scripts.fetch_real_races.ensure_race_data", return_value=[race]):
+        response = client.get("/api/races/today")
+
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["count"] == 1
+    assert data["races"][0]["race_id"] == "20260809_01_01"
+    assert data["races"][0]["place"] == "桐生"
+
+
+def test_api_predictions_today_returns_predictions(client):
+    """GET /api/predictions/today should return today's predictions."""
+    predictions = [
+        {
+            "race_id": "20260809_01_01",
+            "place": "桐生",
+            "race_number": 1,
+            "predicted_order": [1, 2, 3],
+            "confidence": 0.82,
+            "is_purchasable": True,
+        }
+    ]
+    with patch("models.ensemble_model.EnsembleModel.predict_today", return_value=predictions):
+        response = client.get("/api/predictions/today")
+
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["count"] == 1
+    assert data["predictions"][0]["race_id"] == "20260809_01_01"
+    assert data["predictions"][0]["confidence"] == 0.82
 
 
 def test_export_json(client):

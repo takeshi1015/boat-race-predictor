@@ -218,7 +218,7 @@ async function loadPredictions() {
   expiredContainer.innerHTML = `<div class="col-12 text-center py-3 text-muted"><p class="mb-0">読み込み中…</p></div>`;
 
   try {
-    const res = await fetch("/api/races/today");
+    const res = await fetch("/api/predictions/today");
     const data = await res.json();
 
     document.getElementById("today-date").textContent = data.date || "";

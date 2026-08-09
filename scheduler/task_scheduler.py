@@ -38,7 +38,7 @@ def _display_predictions(predictions: list, title: str, target_date: datetime = 
 
     if not predictions:
         print("  予測データがありません。")
-        print("  python scripts/init_test_data.py でテストデータを追加してください。")
+        print("  実レースデータの自動取得を再試行してください。")
         print()
         return
 
@@ -104,6 +104,7 @@ class TaskScheduler:
             logger.error("APScheduler がインストールされていません")
             return
 
+        self._refresh_race_data()
         self._schedule_tasks()
         self._scheduler.start()
         logger.info("タスクスケジューラーを開始しました")
@@ -121,6 +122,7 @@ class TaskScheduler:
         logger.info("当日予測タスクを開始")
         try:
             today = datetime.now()
+            self._refresh_race_data(days=1)
             predictions = self._get_model().predict_today()
             logger.info(f"当日予測完了: {len(predictions)}レース")
 
@@ -142,6 +144,7 @@ class TaskScheduler:
         logger.info("翌日予測タスクを開始")
         try:
             tomorrow = datetime.now() + timedelta(days=1)
+            self._refresh_race_data(days=2)
             predictions = self._get_model().predict_tomorrow()
             logger.info(f"翌日予測完了: {len(predictions)}レース")
 
@@ -251,6 +254,7 @@ class TaskScheduler:
         eval_time = config.SCHEDULE_EVALUATE
 
         from apscheduler.triggers.cron import CronTrigger
+        from apscheduler.triggers.interval import IntervalTrigger
 
         today_h, today_m = self._parse_time(today_time)
         self._scheduler.add_job(
@@ -279,10 +283,30 @@ class TaskScheduler:
             replace_existing=True,
         )
 
+        self._scheduler.add_job(
+            self._refresh_race_data,
+            IntervalTrigger(hours=1),
+            id="refresh_race_data",
+            name="レースデータ更新タスク",
+            replace_existing=True,
+        )
+
     @staticmethod
     def _parse_time(time_str: str):
         parts = time_str.split(":")
         return int(parts[0]), int(parts[1])
+
+    @staticmethod
+    def _refresh_race_data(days: int = 2):
+        """当日・翌日のレースデータを更新"""
+        try:
+            from scripts.fetch_real_races import refresh_upcoming_races
+            refreshed = refresh_upcoming_races(days=days)
+            logger.info(f"レースデータ更新完了: {refreshed}")
+            return refreshed
+        except Exception as e:
+            logger.error(f"レースデータ更新エラー: {e}", exc_info=True)
+            return {}
 
 
 def run_scheduler():
