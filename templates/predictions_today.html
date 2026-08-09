@@ -86,6 +86,22 @@ function updateRaceCounts() {
     document.querySelectorAll(".race-item.closing-soon").length;
 }
 
+function updateEmptyStates() {
+  const highConfContainer = document.getElementById("high-confidence-cards");
+  const highOddsContainer = document.getElementById("high-odds-cards");
+  const closingSoonContainer = document.getElementById("closing-soon-cards");
+
+  if (!highConfContainer.querySelector(".race-item")) {
+    highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">購入可能な高信頼度予想がありません</div></div>`;
+  }
+  if (!highOddsContainer.querySelector(".race-item")) {
+    highOddsContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">その他の購入可能レースはありません</div></div>`;
+  }
+  if (!closingSoonContainer.querySelector(".race-item")) {
+    closingSoonContainer.innerHTML = `<div class="col-12 text-center py-3 text-muted"><p class="mb-0">購入締切間近のレースはありません</p></div>`;
+  }
+}
+
 function createRaceCard(pred, category) {
   const order = (pred.predicted_order || []).join("-") || "-";
   const conf = pred.confidence || 0;
@@ -233,6 +249,7 @@ async function loadPredictions() {
     }
 
     updateRaceCounts();
+    updateEmptyStates();
 
   } catch (e) {
     highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-danger">データ読み込みエラー: ${e.message}</div></div>`;
@@ -242,6 +259,8 @@ async function loadPredictions() {
 
 // リアルタイムカウントダウン
 setInterval(() => {
+  const closingSoonContainer = document.getElementById("closing-soon-cards");
+
   document.querySelectorAll(".race-item[data-race-time]").forEach((el) => {
     const raceTime = el.dataset.raceTime;
     if (!raceTime) return;
@@ -273,6 +292,13 @@ setInterval(() => {
     if (remaining <= 0) {
       el.closest(".col-md-6")?.remove();
     } else if (remaining <= 300) {
+      const cardColumn = el.closest(".col-md-6");
+      if (cardColumn && cardColumn.parentElement !== closingSoonContainer) {
+        if (!closingSoonContainer.querySelector(".race-item")) {
+          closingSoonContainer.innerHTML = "";
+        }
+        closingSoonContainer.appendChild(cardColumn);
+      }
       el.classList.add("closing-soon");
       el.classList.remove("available");
     } else {
@@ -281,6 +307,7 @@ setInterval(() => {
     }
   });
   updateRaceCounts();
+  updateEmptyStates();
 }, 1000);
 
 document.addEventListener("DOMContentLoaded", loadPredictions);
