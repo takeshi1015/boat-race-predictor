@@ -1,6 +1,6 @@
 """
 ボートレース公式サイトから実レースデータを取得するスクリプト
-全会場の当日・翌日のレースを取得
+全会場の当日・翌日のレースを取得（終了したレースは除外）
 """
 
 import sys
@@ -75,7 +75,7 @@ class BoatraceDataFetcher:
             return []
 
     def fetch_races_for_date(self, target_date: datetime = None) -> list:
-        """指定日のレースデータを公式サイトから取得"""
+        """指定日のレースデータを公式サイトから取得（未開始レースのみ）"""
         if target_date is None:
             target_date = datetime.now()
 
@@ -102,9 +102,10 @@ class BoatraceDataFetcher:
         return races
 
     def _fetch_races_for_venue(self, target_date: datetime, venue_code: str, venue_name: str) -> list:
-        """指定会場のレースデータを取得"""
+        """指定会場のレースデータを取得（終了したレースは除外）"""
         races = []
         date_str = target_date.strftime("%Y%m%d")
+        now = datetime.now()
 
         try:
             # 正確なエンドポイント: /owpc/pc/race/raceindex
@@ -159,6 +160,11 @@ class BoatraceDataFetcher:
                     race_datetime = target_date.replace(
                         hour=hour, minute=minute, second=0, microsecond=0
                     )
+
+                    # ⭐️ 重要：現在時刻より後のレースのみ取得
+                    if race_datetime <= now:
+                        logger.debug(f"  スキップ（既終了）: {venue_name} {race_num}R ({hour:02d}:{minute:02d})")
+                        continue
 
                     race_data = {
                         "race_id": f"{date_str}_{venue_code}_{race_num:02d}",
