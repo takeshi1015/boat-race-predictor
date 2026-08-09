@@ -3,6 +3,7 @@
 import json
 import os
 import pytest
+from unittest.mock import patch
 
 from app import create_app
 
@@ -45,7 +46,6 @@ def test_api_predictions_returns_json(client):
     assert "predictions" in data
     predictions = data["predictions"]
     assert isinstance(predictions, dict)
-    assert len(predictions) > 0
     for model_name, result in predictions.items():
         assert "prediction" in result
         assert "confidence" in result
@@ -73,6 +73,7 @@ def test_api_models_info(client):
 
 def test_export_json(client):
     """GET /api/predictions/export/json should trigger a JSON file download."""
+    _seed_predictions(client)
     response = client.get("/api/predictions/export/json")
     assert response.status_code == 200
     assert "application/json" in response.content_type
@@ -83,6 +84,7 @@ def test_export_json(client):
 
 def test_export_csv(client):
     """GET /api/predictions/export/csv should trigger a CSV file download."""
+    _seed_predictions(client)
     response = client.get("/api/predictions/export/csv")
     assert response.status_code == 200
     assert "text/csv" in response.content_type
@@ -131,6 +133,23 @@ def test_post_predict_invalid_body(client):
         content_type="application/json",
     )
     assert response.status_code == 400
+
+
+def test_api_races_today_returns_races(client):
+    response = client.get("/api/races/today")
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert "races" in data
+    assert "count" in data
+
+
+def test_api_predictions_today_returns_payload(client):
+    with patch("models.ensemble_model.EnsembleModel.predict_today", return_value=[]):
+        response = client.get("/api/predictions/today")
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert "predictions" in data
+    assert "count" in data
 
 
 # ---------------------------------------------------------------------------
@@ -202,3 +221,31 @@ def test_run_all_models_demo_saves_all(output_dirs):
 
     assert os.path.exists(os.path.join(outputs_dir, "results.json"))
     assert os.path.exists(os.path.join(outputs_dir, "results.csv"))
+
+
+def _seed_predictions(client):
+    race_data = {
+        "entries": [
+            {
+                "frame_number": 1,
+                "player_id": "P001",
+                "win_rate": 0.55,
+                "place_rate": 0.70,
+                "payoff_rate": 0.50,
+                "avg_start_timing": 0.12,
+                "recent_results": ["1", "2", "1"],
+                "rank": "A1",
+                "flying_count": 0,
+                "avg_speed": 6.8,
+                "boat_win_rate": 0.50,
+                "boat_place_rate": 0.65,
+                "engine_rate": 0.70,
+                "exhibition_time": 6.75,
+            },
+        ]
+    }
+    client.post(
+        "/api/predict",
+        data=json.dumps(race_data),
+        content_type="application/json",
+    )

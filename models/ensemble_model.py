@@ -221,6 +221,8 @@ class EnsembleModel:
             water_reason = _WATER_REASONS.get(water_cond, "")
             if water_reason:
                 reason = reason + "。" + water_reason if reason else water_reason
+            race_result = getattr(race, "result", None) if hasattr(race, "result") else None
+            race_result = race_result if isinstance(race_result, dict) else {}
 
             date_val = getattr(race, "date", datetime.now())
             date_str = date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val)
@@ -257,6 +259,9 @@ class EnsembleModel:
                 "purchase_deadline_iso": purchase_deadline_iso,
                 "is_purchasable": is_purchasable,
                 "time_remaining": time_remaining,
+                "participants": race_result.get("participants", []),
+                "odds": race_result.get("odds", {}),
+                "status": race_result.get("status", "unknown"),
             }
         except Exception as e:
             logger.error(f"レース予測エラー: {e}")

@@ -38,7 +38,7 @@ def _display_predictions(predictions: list, title: str, target_date: datetime = 
 
     if not predictions:
         print("  予測データがありません。")
-        print("  python scripts/init_test_data.py でテストデータを追加してください。")
+        print("  実レースデータの取得状況を確認してください。")
         print()
         return
 

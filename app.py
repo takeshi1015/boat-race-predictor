@@ -7,12 +7,61 @@ or via the CLI:
     python main.py --mode web
 """
 
+import os
 from flask import Flask, render_template
 from flask_cors import CORS
 
 import config
 from api import api_bp
 from utils.logger import logger
+
+_race_sync_scheduler = None
+_race_sync_started = False
+
+
+def _is_test_runtime() -> bool:
+    return bool(os.getenv("PYTEST_CURRENT_TEST"))
+
+
+def _start_race_data_sync() -> None:
+    global _race_sync_scheduler, _race_sync_started
+    if _race_sync_started:
+        return
+
+    try:
+        from scripts.fetch_real_races import refresh_race_data
+
+        saved, archived = refresh_race_data()
+        logger.info("起動時レースデータ更新: 保存=%d 履歴化=%d", saved, archived)
+    except Exception as exc:
+        logger.error("起動時レースデータ更新に失敗: %s", exc, exc_info=True)
+
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+
+        _race_sync_scheduler = BackgroundScheduler()
+        _race_sync_scheduler.add_job(
+            _sync_race_data_job,
+            trigger="interval",
+            hours=1,
+            id="sync_race_data_hourly",
+            replace_existing=True,
+        )
+        _race_sync_scheduler.start()
+        _race_sync_started = True
+        logger.info("レースデータ1時間更新スケジューラを開始")
+    except Exception as exc:
+        logger.warning("1時間更新スケジューラ開始失敗: %s", exc)
+
+
+def _sync_race_data_job() -> None:
+    try:
+        from scripts.fetch_real_races import refresh_race_data
+
+        saved, archived = refresh_race_data()
+        logger.info("定期レースデータ更新: 保存=%d 履歴化=%d", saved, archived)
+    except Exception as exc:
+        logger.error("定期レースデータ更新エラー: %s", exc, exc_info=True)
 
 
 def create_app() -> Flask:
@@ -29,6 +78,9 @@ def create_app() -> Flask:
 
     # Register the REST API blueprint
     app.register_blueprint(api_bp)
+
+    if not _is_test_runtime():
+        _start_race_data_sync()
 
     # -----------------------------------------------------------------------
     # Web dashboard routes

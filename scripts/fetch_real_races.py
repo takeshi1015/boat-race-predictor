@@ -1,209 +1,307 @@
-"""
-ボートレース公式サイトから実レースデータを取得するスクリプト
-全21会場の当日・翌日のレースを取得
-"""
+"""実レースデータ取得（boatrace.jp）."""
 
-import sys
+from __future__ import annotations
+
 import os
-import requests
+import re
+import sys
+import time
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
+
+import requests
 from bs4 import BeautifulSoup
-import logging
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.db_manager import get_db_manager
 from database.models import Race
+from utils.logger import setup_logger
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class BoatraceDataFetcher:
-    """ボートレース公式サイトからレースデータを取得"""
+    """boatrace.jp から当日レースを取得する."""
 
-    # 全21場のレース場コードと名前
-    VENUES = {
-        "01": "桐生", "02": "平和島", "03": "住之江", "04": "尼崎",
-        "05": "鳴門", "06": "多摩川", "07": "戸田", "08": "江戸川",
-        "09": "浜名湖", "10": "蒲郡", "11": "常滑", "12": "津",
-        "13": "三国", "14": "びわこ", "15": "丸亀", "16": "児島",
-        "17": "宮島", "18": "芦屋", "19": "福岡", "20": "唐津", "21": "大村",
-    }
+    BASE_URL = "https://www.boatrace.jp"
+    REQUEST_RETRY_COUNT = 3
+    REQUEST_RETRY_DELAY = 2
+    REQUEST_TIMEOUT = 15
 
-    # 各会場のレース時間パターン（会場ごとの開催時間）
-    # キー：会場コード、値：(開始時刻(時), 終了時刻(時))
-    VENUE_RACE_TIMES = {
-        # ナイター開催（桐生、蒲郡、住之江、丸亀、大村、下関、若松）
-        "01": [(15, 20), (15, 50), (16, 20), (16, 50), (17, 20), (17, 50),
-               (18, 20), (18, 50), (19, 20), (19, 50), (20, 20), (20, 50)],  # 桐生
-        "10": [(15, 0), (15, 30), (16, 0), (16, 30), (17, 0), (17, 30),
-               (18, 0), (18, 30), (19, 0), (19, 30), (20, 0), (20, 45)],  # 蒲郡
-        "03": [(15, 20), (15, 50), (16, 20), (16, 50), (17, 20), (17, 50),
-               (18, 20), (18, 50), (19, 20), (19, 50), (20, 20), (20, 45)],  # 住之江
-        "15": [(15, 30), (16, 0), (16, 30), (17, 0), (17, 30), (18, 0),
-               (18, 30), (19, 0), (19, 30), (20, 0), (20, 30), (21, 0)],  # 丸亀
-        "21": [(15, 30), (16, 0), (16, 30), (17, 0), (17, 30), (18, 0),
-               (18, 30), (19, 0), (19, 30), (20, 0), (20, 30), (20, 45)],  # 大村
-        
-        # モーニング開催（三国、鳴門、唐津、芦屋）
-        "13": [(8, 40), (9, 10), (9, 40), (10, 10), (10, 40), (11, 10),
-               (11, 40), (12, 10), (12, 40), (13, 10), (13, 40), (14, 10)],  # 三国
-        "05": [(8, 30), (9, 0), (9, 30), (10, 0), (10, 30), (11, 0),
-               (11, 30), (12, 0), (12, 30), (13, 0), (13, 30), (14, 0)],  # 鳴門
-        "20": [(8, 45), (9, 15), (9, 45), (10, 15), (10, 45), (11, 15),
-               (11, 45), (12, 15), (12, 45), (13, 15), (13, 45), (14, 30)],  # 唐津
-        "18": [(8, 30), (9, 0), (9, 30), (10, 0), (10, 30), (11, 0),
-               (11, 30), (12, 0), (12, 30), (13, 0), (13, 30), (14, 10)],  # 芦屋
-        
-        # デイ開催（その他の会場）
-        "02": [(11, 15), (11, 45), (12, 15), (12, 45), (13, 15), (13, 45),
-               (14, 15), (14, 45), (15, 15), (15, 45), (16, 15), (16, 45)],  # 平和島
-        "04": [(10, 50), (11, 20), (11, 50), (12, 20), (12, 50), (13, 20),
-               (13, 50), (14, 20), (14, 50), (15, 20), (15, 50), (16, 20)],  # 尼崎
-        "06": [(12, 0), (12, 30), (13, 0), (13, 30), (14, 0), (14, 30),
-               (15, 0), (15, 30), (16, 0), (16, 30), (17, 0), (17, 40)],  # 多摩川
-        "07": [(10, 50), (11, 20), (11, 50), (12, 20), (12, 50), (13, 20),
-               (13, 50), (14, 20), (14, 50), (15, 20), (15, 50), (16, 20)],  # 戸田
-        "08": [(11, 15), (11, 45), (12, 15), (12, 45), (13, 15), (13, 45),
-               (14, 15), (14, 45), (15, 15), (15, 45), (16, 15), (16, 45)],  # 江戸川
-        "09": [(11, 30), (12, 0), (12, 30), (13, 0), (13, 30), (14, 0),
-               (14, 30), (15, 0), (15, 30), (16, 0), (16, 30), (17, 10)],  # 浜名湖
-        "11": [(11, 15), (11, 45), (12, 15), (12, 45), (13, 15), (13, 45),
-               (14, 15), (14, 45), (15, 15), (15, 45), (16, 15), (16, 45)],  # 常滑
-        "12": [(11, 30), (12, 0), (12, 30), (13, 0), (13, 30), (14, 0),
-               (14, 30), (15, 0), (15, 30), (16, 0), (16, 30), (17, 10)],  # 津
-        "14": [(10, 50), (11, 20), (11, 50), (12, 20), (12, 50), (13, 20),
-               (13, 50), (14, 20), (14, 50), (15, 20), (15, 50), (16, 20)],  # びわこ
-        "16": [(11, 15), (11, 45), (12, 15), (12, 45), (13, 15), (13, 45),
-               (14, 15), (14, 45), (15, 15), (15, 45), (16, 15), (16, 45)],  # 児島
-        "17": [(11, 15), (11, 45), (12, 15), (12, 45), (13, 15), (13, 45),
-               (14, 15), (14, 45), (15, 15), (15, 45), (16, 15), (16, 45)],  # 宮島
-        "19": [(11, 15), (11, 45), (12, 15), (12, 45), (13, 15), (13, 45),
-               (14, 15), (14, 45), (15, 15), (15, 45), (16, 15), (16, 45)],  # 福岡
+    # 要件で指定された会場（実運用で使われるコード差異を吸収）
+    PRIMARY_VENUES = {
+        "02": "平和島",
+        "03": "住之江",
+        "04": "尼崎",
+        "05": "鳴門",
+        "06": "多摩川",
+        "07": "戸田",
+        "08": "江戸川",
+        "09": "浜名湖",
+        "10": "蒲郡",
+        "12": "津",
+        "13": "三国",
+        "14": "びわこ",
+        "15": "丸亀",
+        "16": "児島",
+        "17": "宮島",
+        "18": "徳山",
+        "19": "下関",
+        "20": "戸畑",
+        "22": "福岡",
+        "23": "唐津",
+        "24": "大村",
     }
+    LEGACY_VENUE_CODE_BY_NAME = {
+        "福岡": "19",
+        "唐津": "20",
+        "大村": "21",
+    }
+    VENUES = {**PRIMARY_VENUES, **{code: name for name, code in LEGACY_VENUE_CODE_BY_NAME.items()}}
 
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        })
+        self.session.headers.update(
+            {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/126.0 Safari/537.36"
+                )
+            }
+        )
 
-    def fetch_races_for_date(self, target_date: datetime = None) -> list:
-        """指定日のレースデータを公式サイトから取得"""
-        if target_date is None:
-            target_date = datetime.now()
-
-        logger.info(f"📥 {target_date.strftime('%Y年%m月%d日')} のレースデータを取得中...")
-
-        # すべての21会場のレースを生成
-        races = self._generate_all_venues_races(target_date)
-        logger.info(f"📊 合計 {len(races)}件のレースを取得")
-
+    def fetch_races_for_date(self, target_date: Optional[datetime] = None) -> list:
+        """指定日の実レースデータを取得."""
+        target_date = target_date or datetime.now()
+        active_venues = self._fetch_active_venues(target_date)
+        races: List[Dict[str, Any]] = []
+        for venue_code in active_venues:
+            for race_number in range(1, 13):
+                race_data = self._fetch_race(venue_code, race_number, target_date)
+                if race_data:
+                    races.append(race_data)
+        logger.info("%s レース取得件数: %d", target_date.strftime("%Y-%m-%d"), len(races))
         return races
 
-    def _fetch_active_venues(self, target_date: datetime) -> list:
-        """boatrace.jp から指定日に開催される会場コードのリストを取得"""
-        active_codes = []
-        date_str = target_date.strftime("%Y%m%d")
-
-        try:
-            url = "https://www.boatrace.jp/owpc/pc/race/monthlyschedule"
-            params = {"ym": target_date.strftime("%Y%m")}
-            response = self.session.get(url, params=params, timeout=10)
-            response.encoding = "utf-8"
-
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, "html.parser")
-
-                # 対象日のリンクを探す (hd=YYYYMMDD かつ jcd=XX を含む)
-                for a_tag in soup.find_all("a", href=True):
-                    href = a_tag.get("href", "")
-                    if f"hd={date_str}" in href and "jcd=" in href:
-                        jcd_pos = href.find("jcd=")
-                        venue_code = href[jcd_pos + 4: jcd_pos + 6]
-                        if venue_code in self.VENUES and venue_code not in active_codes:
-                            active_codes.append(venue_code)
-
-                if active_codes:
-                    logger.info(f"   ✅ 開催会場 {len(active_codes)}場 を月間スケジュールから取得")
-                    return sorted(active_codes)
-
-                logger.debug("   対象日のレースリンクが見つかりません")
-
-        except Exception as e:
-            logger.debug(f"   開催会場取得エラー: {e}")
-
-        # フォールバック: 全会場コードを返す
-        logger.warning("   ⚠️  開催会場取得失敗、全会場にフォールバック")
-        return sorted(self.VENUES.keys())
-
-    def _fetch_monthly_schedule(self, target_date: datetime) -> list:
-        """月間スケジュールページから取得（後方互換のため維持）"""
+    def _request_with_retry(self, path: str, params: Dict[str, Any]) -> Optional[requests.Response]:
+        url = f"{self.BASE_URL}{path}"
+        for attempt in range(1, self.REQUEST_RETRY_COUNT + 1):
+            try:
+                response = self.session.get(url, params=params, timeout=self.REQUEST_TIMEOUT)
+                response.raise_for_status()
+                response.encoding = "utf-8"
+                return response
+            except requests.RequestException as exc:
+                logger.warning(
+                    "HTTP失敗 (%s) attempt=%d/%d: %s",
+                    path,
+                    attempt,
+                    self.REQUEST_RETRY_COUNT,
+                    exc,
+                )
+                if attempt < self.REQUEST_RETRY_COUNT:
+                    time.sleep(self.REQUEST_RETRY_DELAY)
         return None
 
-    def _generate_all_venues_races(self, target_date: datetime, venue_codes: list = None) -> list:
-        """指定会場（省略時は全21会場）のテストレースを生成"""
-        races = []
+    def _fetch_active_venues(self, target_date: datetime) -> list:
+        """指定日開催の対象会場コードを取得."""
+        date_str = target_date.strftime("%Y%m%d")
+        response = self._request_with_retry(
+            "/owpc/pc/race/monthlyschedule", {"ym": target_date.strftime("%Y%m")}
+        )
 
-        venues_to_use = {
-            code: name for code, name in self.VENUES.items()
-            if venue_codes is None or code in venue_codes
+        candidates: List[str] = []
+        if response is not None:
+            soup = BeautifulSoup(response.text, "html.parser")
+            for a_tag in soup.find_all("a", href=True):
+                href = a_tag.get("href", "")
+                if f"hd={date_str}" not in href:
+                    continue
+                match = re.search(r"jcd=(\d{2})", href)
+                if not match:
+                    continue
+                code = match.group(1)
+                if code in self.PRIMARY_VENUES and code not in candidates:
+                    candidates.append(code)
+
+        if candidates:
+            return sorted(candidates)
+
+        logger.warning("開催会場の取得に失敗。要件対象会場の既知コードにフォールバックします。")
+        fallback: List[str] = sorted(self.PRIMARY_VENUES.keys())
+        for legacy_code in self.LEGACY_VENUE_CODE_BY_NAME.values():
+            if legacy_code not in fallback:
+                fallback.append(legacy_code)
+        return sorted(fallback)
+
+    def _fetch_race(self, venue_code: str, race_number: int, target_date: datetime) -> Optional[Dict[str, Any]]:
+        params = {"hd": target_date.strftime("%Y%m%d"), "jcd": venue_code, "rno": race_number}
+        race_response = self._request_with_retry("/owpc/pc/race/racelist", params)
+        if race_response is None:
+            return None
+
+        soup = BeautifulSoup(race_response.text, "html.parser")
+        race_datetime = self._parse_race_datetime(soup, target_date)
+        participants = self._parse_participants(soup)
+        if not participants:
+            return None
+
+        odds = self._fetch_odds(venue_code, race_number, target_date)
+        venue_name = self.VENUES.get(venue_code, f"会場{venue_code}")
+        water_condition = self._parse_water_condition(soup)
+
+        return {
+            "race_id": f"{target_date.strftime('%Y%m%d')}_{venue_code}_{race_number:02d}",
+            "date": race_datetime,
+            "venue": venue_name,
+            "place": venue_name,
+            "race_number": race_number,
+            "weather": self._parse_weather(soup),
+            "water_condition": water_condition,
+            "water_surface": water_condition,
+            "start_time_hour": race_datetime.hour,
+            "time_of_day": self._time_of_day(race_datetime.hour),
+            "number_of_boats": len(participants),
+            "wind_speed": 0.0,
+            "temperature": 0.0,
+            "humidity": 0.0,
+            "result": {
+                "source": "boatrace.jp",
+                "venue_code": venue_code,
+                "participants": participants,
+                "odds": odds,
+                "race_time": race_datetime.strftime("%H:%M"),
+                "status": "upcoming",
+            },
         }
 
-        for venue_code, venue_name in sorted(venues_to_use.items()):
-            # 会場ごとのレース時間を取得
-            race_times = self.VENUE_RACE_TIMES.get(venue_code, [])
-            
-            if not race_times:
-                logger.warning(f"  ⚠️  {venue_name} のレース時間が設定されていません")
+    def _fetch_odds(self, venue_code: str, race_number: int, target_date: datetime) -> Dict[str, float]:
+        params = {"hd": target_date.strftime("%Y%m%d"), "jcd": venue_code, "rno": race_number}
+        response = self._request_with_retry("/owpc/pc/race/odds3t", params)
+        if response is None:
+            return {}
+        soup = BeautifulSoup(response.text, "html.parser")
+        odds: Dict[str, float] = {}
+        for row in soup.find_all("tr"):
+            cells = row.find_all("td")
+            if len(cells) < 2:
                 continue
-            
-            for race_num, (hour, minute) in enumerate(race_times, 1):
-                race_date = target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                
-                # 天気と水面状況を会場ごとに設定
-                weather_map = {
-                    "01": "sunny", "02": "cloudy", "03": "rainy", "04": "cloudy",
-                    "05": "sunny", "06": "cloudy", "07": "sunny", "08": "cloudy",
-                    "09": "sunny", "10": "cloudy", "11": "rainy", "12": "sunny",
-                    "13": "cloudy", "14": "sunny", "15": "sunny", "16": "cloudy",
-                    "17": "rainy", "18": "cloudy", "19": "sunny", "20": "cloudy", "21": "rainy",
-                }
-                
-                water_map = {
-                    "01": "calm", "02": "slight", "03": "moderate", "04": "calm",
-                    "05": "slight", "06": "calm", "07": "moderate", "08": "slight",
-                    "09": "calm", "10": "moderate", "11": "rough", "12": "calm",
-                    "13": "slight", "14": "calm", "15": "calm", "16": "moderate",
-                    "17": "rough", "18": "slight", "19": "calm", "20": "moderate", "21": "moderate",
-                }
-                
-                race_data = {
-                    "race_id": f"{target_date.strftime('%Y%m%d')}_{venue_code}_{race_num:02d}",
-                    "date": race_date,
-                    "venue": venue_name,
-                    "place": venue_name,
-                    "race_number": race_num,
-                    "weather": weather_map.get(venue_code, "sunny"),
-                    "water_condition": water_map.get(venue_code, "calm"),
-                    "water_surface": water_map.get(venue_code, "calm"),
-                    "start_time_hour": hour,
-                    "time_of_day": "morning" if hour < 12 else ("midday" if hour < 17 else "evening"),
-                    "number_of_boats": 6,
-                    "wind_speed": 2.0,
-                    "temperature": 28.0,
-                    "humidity": 70.0,
-                }
-                
-                races.append(race_data)
-                logger.info(f"  ✅ {venue_name} {race_num}R ({hour:02d}:{minute:02d})")
-        
-        return races
+            combo = self._extract_combination(cells[0].get_text(" ", strip=True))
+            odd = self._extract_float(cells[1].get_text(" ", strip=True))
+            if combo and odd is not None:
+                odds[combo] = odd
+        if odds:
+            return odds
+        for combo, value in re.findall(r"(\d-\d-\d)\s*([0-9]+(?:\.[0-9]+)?)", soup.get_text(" ", strip=True)):
+            odds[combo] = float(value)
+        return odds
+
+    @staticmethod
+    def _parse_race_datetime(soup: BeautifulSoup, target_date: datetime) -> datetime:
+        race_time = None
+        for selector in [".is-time", ".time", ".raceTime", ".raceresult_time"]:
+            node = soup.select_one(selector)
+            if node:
+                race_time = BoatraceDataFetcher._extract_time(node.get_text(" ", strip=True))
+                if race_time:
+                    break
+        if not race_time:
+            race_time = BoatraceDataFetcher._extract_time(soup.get_text(" ", strip=True))
+        if not race_time:
+            race_time = "00:00"
+        hour, minute = [int(x) for x in race_time.split(":")]
+        return target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    @staticmethod
+    def _parse_participants(soup: BeautifulSoup) -> List[Dict[str, Any]]:
+        participants: List[Dict[str, Any]] = []
+        seen_lane = set()
+        for row in soup.find_all("tr"):
+            cells = row.find_all("td")
+            if not cells:
+                continue
+            lane = BoatraceDataFetcher._extract_lane(cells[0].get_text(" ", strip=True))
+            if lane is None or lane in seen_lane:
+                continue
+            name = BoatraceDataFetcher._extract_name_from_row(row)
+            if not name:
+                continue
+            participants.append({"lane": lane, "name": name})
+            seen_lane.add(lane)
+        participants.sort(key=lambda item: item["lane"])
+        return participants
+
+    @staticmethod
+    def _extract_name_from_row(row) -> str:
+        for a_tag in row.find_all("a"):
+            text = a_tag.get_text(strip=True)
+            if text and not text.isdigit():
+                return text
+        for cell in row.find_all("td")[1:]:
+            text = cell.get_text(" ", strip=True)
+            if text and re.search(r"[ぁ-んァ-ン一-龥]", text):
+                return text.split()[0]
+        return ""
+
+    @staticmethod
+    def _parse_weather(soup: BeautifulSoup) -> str:
+        text = soup.get_text(" ", strip=True)
+        if "雨" in text:
+            return "rainy"
+        if "曇" in text:
+            return "cloudy"
+        return "sunny"
+
+    @staticmethod
+    def _parse_water_condition(soup: BeautifulSoup) -> str:
+        text = soup.get_text(" ", strip=True)
+        if "荒" in text:
+            return "rough"
+        if "波高" in text or "波" in text:
+            return "slight"
+        return "calm"
+
+    @staticmethod
+    def _extract_time(text: str) -> Optional[str]:
+        match = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", text)
+        if not match:
+            return None
+        return f"{int(match.group(1)):02d}:{match.group(2)}"
+
+    @staticmethod
+    def _extract_lane(text: str) -> Optional[int]:
+        match = re.search(r"\b([1-6])\b", text)
+        if not match:
+            return None
+        return int(match.group(1))
+
+    @staticmethod
+    def _extract_combination(text: str) -> Optional[str]:
+        match = re.search(r"([1-6])\D+([1-6])\D+([1-6])", text)
+        if not match:
+            return None
+        return f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
+
+    @staticmethod
+    def _extract_float(text: str) -> Optional[float]:
+        match = re.search(r"([0-9]+(?:\.[0-9]+)?)", text.replace(",", ""))
+        if not match:
+            return None
+        return float(match.group(1))
+
+    @staticmethod
+    def _time_of_day(hour: int) -> str:
+        if hour < 12:
+            return "morning"
+        if hour < 17:
+            return "midday"
+        return "evening"
 
 
 def save_races_to_db(races: list) -> int:
-    """レースデータをDBに保存"""
+    """レースデータをDBに保存（重複時は更新）."""
     if not races:
         logger.warning("保存するレースがありません")
         return 0
@@ -212,26 +310,24 @@ def save_races_to_db(races: list) -> int:
     session = db.get_session()
 
     try:
-        saved_count = 0
-
+        upserted_count = 0
         for race_data in races:
             try:
                 existing = db.get_race(session, race_data["race_id"])
                 if existing:
-                    logger.debug(f"スキップ（既存）: {race_data['race_id']}")
-                    continue
-
-                race = Race(**race_data)
-                session.add(race)
-                saved_count += 1
-
+                    for key, value in race_data.items():
+                        if hasattr(existing, key):
+                            setattr(existing, key, value)
+                else:
+                    session.add(Race(**race_data))
+                upserted_count += 1
             except Exception as e:
                 logger.debug(f"レース保存エラー: {e}")
                 session.rollback()
 
         session.commit()
-        logger.info(f"✅ {saved_count}件のレースをDBに保存")
-        return saved_count
+        logger.info(f"✅ {upserted_count}件のレースをDBに保存/更新")
+        return upserted_count
 
     except Exception as e:
         logger.error(f"DB保存エラー: {e}")
@@ -241,6 +337,45 @@ def save_races_to_db(races: list) -> int:
         session.close()
 
 
+def archive_completed_races(now: Optional[datetime] = None, completion_grace_minutes: int = 15) -> int:
+    """終了レースを履歴状態へ更新."""
+    now = now or datetime.now()
+    db = get_db_manager()
+    session = db.get_session()
+    try:
+        archived = 0
+        races = session.query(Race).all()
+        for race in races:
+            race_result = race.result if isinstance(race.result, dict) else {}
+            status = race_result.get("status")
+            completion_time = race.date + timedelta(minutes=completion_grace_minutes) if race.date else None
+            if completion_time and completion_time <= now and status != "completed":
+                race_result["status"] = "completed"
+                race.result = race_result
+                archived += 1
+            elif race.date and race.date > now and status != "upcoming":
+                race_result["status"] = "upcoming"
+                race.result = race_result
+        session.commit()
+        return archived
+    except Exception as exc:
+        logger.error("終了レース履歴更新エラー: %s", exc)
+        session.rollback()
+        return 0
+    finally:
+        session.close()
+
+
+def refresh_race_data(target_date: Optional[datetime] = None) -> Tuple[int, int]:
+    """指定日の実レース取得 + DB保存 + 履歴更新."""
+    fetcher = BoatraceDataFetcher()
+    date_to_use = target_date or datetime.now()
+    races = fetcher.fetch_races_for_date(date_to_use)
+    saved = save_races_to_db(races)
+    archived = archive_completed_races()
+    return saved, archived
+
+
 def main():
     print()
     print("━" * 60)
@@ -248,29 +383,20 @@ def main():
     print("━" * 60)
     print()
 
-    fetcher = BoatraceDataFetcher()
-
-    # 当日のレースを取得
     today = datetime.now()
-    today_races = fetcher.fetch_races_for_date(today)
-    saved_today = save_races_to_db(today_races)
-
-    print()
-
-    # 翌日のレースを取得
     tomorrow = today + timedelta(days=1)
-    tomorrow_races = fetcher.fetch_races_for_date(tomorrow)
-    saved_tomorrow = save_races_to_db(tomorrow_races)
+    saved_today, archived_today = refresh_race_data(today)
+    saved_tomorrow, archived_tomorrow = refresh_race_data(tomorrow)
 
     print()
     print("━" * 60)
     print("✅ レースデータ取得完了！")
-    print(f"   当日: {saved_today}件")
-    print(f"   翌日: {saved_tomorrow}件")
+    print(f"   当日保存: {saved_today}件")
+    print(f"   翌日保存: {saved_tomorrow}件")
+    print(f"   履歴移動: {archived_today + archived_tomorrow}件")
     print()
-    print("次のコマンドで予想を実行してください：")
-    print("  python main.py --mode predict-today")
-    print("  python main.py --mode predict-tomorrow")
+    print("次のコマンドでサーバーを起動してください：")
+    print("  python main.py --mode run-server")
     print("━" * 60)
     print()
 

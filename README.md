@@ -44,8 +44,7 @@ boat-race-predictor/
 ├── requirements.txt       # Python依存関係
 ├── .env.example          # 環境変数テンプレート
 ├── scripts/
-│   ├── fetch_real_races.py    # 公式サイトから実レースデータ取得
-│   └── init_test_data.py      # テストデータ生成（非推奨：本番運用では使用しない）
+│   └── fetch_real_races.py    # boatrace.jp から実レースデータ取得
 ├── scheduler/
 │   └── task_scheduler.py  # タスクスケジューラー
 ├── scrapers/

@@ -57,7 +57,7 @@ def main():
         session = db.get_session()
         races = db.get_races_by_date(session, datetime.now())
         session.close()
-        assert len(races) > 0, f"当日レースが0件です。python scripts/init_test_data.py を実行してください"
+        assert len(races) > 0, "当日レースが0件です。実レースデータ取得を実行してください"
         return races
     results.append(check("当日レースデータ存在確認", check_races))
     print()
@@ -149,7 +149,7 @@ def main():
         print("  python main.py --mode run-server        # Web UI起動")
     else:
         print("⚠️  一部のチェックが失敗しました。")
-        print("   python scripts/init_test_data.py を実行してください。")
+        print("   python scripts/fetch_real_races.py を実行してください。")
     print("━" * 50)
     print()
 

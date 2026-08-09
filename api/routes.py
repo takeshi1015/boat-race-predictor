@@ -6,7 +6,7 @@ All endpoints are registered on the ``api`` Blueprint defined in
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict
 
 from flask import Response, jsonify, request
@@ -67,70 +67,6 @@ MODEL_INFO: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# ---------------------------------------------------------------------------
-# Minimal sample race data used when no race data has been persisted yet
-# ---------------------------------------------------------------------------
-_SAMPLE_RACE: Dict[str, Any] = {
-    "race_id": "demo-001",
-    "race_number": 1,
-    "location": "Kiryu",
-    "wind_speed": 2.0,
-    "wave_height": 5.0,
-    "air_temperature": 22.0,
-    "water_temperature": 20.0,
-    "entries": [
-        {
-            "frame_number": 1,
-            "player_id": "P001",
-            "win_rate": 0.55,
-            "place_rate": 0.70,
-            "payoff_rate": 0.50,
-            "avg_start_timing": 0.12,
-            "recent_results": ["1", "2", "1", "3", "1"],
-            "rank": "A1",
-            "flying_count": 0,
-            "avg_speed": 6.8,
-            "boat_win_rate": 0.50,
-            "boat_place_rate": 0.65,
-            "engine_rate": 0.70,
-            "exhibition_time": 6.75,
-        },
-        {
-            "frame_number": 2,
-            "player_id": "P002",
-            "win_rate": 0.40,
-            "place_rate": 0.60,
-            "payoff_rate": 0.38,
-            "avg_start_timing": 0.18,
-            "recent_results": ["2", "1", "3", "2", "4"],
-            "rank": "A2",
-            "flying_count": 0,
-            "avg_speed": 6.6,
-            "boat_win_rate": 0.42,
-            "boat_place_rate": 0.58,
-            "engine_rate": 0.60,
-            "exhibition_time": 6.80,
-        },
-        {
-            "frame_number": 3,
-            "player_id": "P003",
-            "win_rate": 0.30,
-            "place_rate": 0.50,
-            "payoff_rate": 0.28,
-            "avg_start_timing": 0.20,
-            "recent_results": ["3", "3", "2", "5", "3"],
-            "rank": "B1",
-            "flying_count": 1,
-            "avg_speed": 6.3,
-            "boat_win_rate": 0.35,
-            "boat_place_rate": 0.50,
-            "engine_rate": 0.50,
-            "exhibition_time": 6.90,
-        },
-    ],
-}
-
-
 def _build_results_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Wrap raw run_all_predictions() output in the standard API envelope.
 
@@ -161,10 +97,9 @@ def get_predictions() -> Response:
     """
     data = load_latest_results()
     if not data:
-        logger.info("No cached results found; running predictions now")
-        raw = run_all_predictions(_SAMPLE_RACE)
-        data = _build_results_payload(raw)
-        save_results_json(data)
+        return jsonify(
+            {"timestamp": datetime.now().isoformat(), "models": [], "predictions": {}, "message": "予測データがありません"}
+        )
     return jsonify(data)
 
 
@@ -186,9 +121,7 @@ def get_prediction_by_model(model_name: str) -> Response:
 
     data = load_latest_results()
     if not data:
-        raw = run_all_predictions(_SAMPLE_RACE)
-        data = _build_results_payload(raw)
-        save_results_json(data)
+        return jsonify({"error": "予測データがありません"}), 404
 
     predictions = data.get("predictions", {})
     if model_name not in predictions:
@@ -252,9 +185,7 @@ def export_predictions_csv() -> Response:
     """
     data = load_latest_results()
     if not data:
-        raw = run_all_predictions(_SAMPLE_RACE)
-        data = _build_results_payload(raw)
-        save_results_json(data)
+        return jsonify({"error": "予測データがありません"}), 404
 
     csv_text = results_to_csv_string(data)
     return Response(
@@ -276,9 +207,7 @@ def export_predictions_json() -> Response:
     """
     data = load_latest_results()
     if not data:
-        raw = run_all_predictions(_SAMPLE_RACE)
-        data = _build_results_payload(raw)
-        save_results_json(data)
+        return jsonify({"error": "予測データがありません"}), 404
 
     return Response(
         json.dumps(data, ensure_ascii=False, indent=2),
@@ -332,20 +261,67 @@ def health_check() -> Response:
 # ---------------------------------------------------------------------------
 @api_bp.route("/races/today", methods=["GET"])
 def get_today_races() -> Response:
-    """Return today's race predictions from the database.
+    """Return today's races from boatrace.jp-synced database.
 
     Returns:
-        JSON array of race predictions.
+        JSON array of race snapshots.
     """
     try:
+        from database.db_manager import get_db_manager
+
+        now = datetime.now()
+        db = get_db_manager()
+        session = db.get_session()
+        try:
+            races = db.get_races_by_date(session, now)
+            rows = []
+            for race in races:
+                race_result = race.result if isinstance(race.result, dict) else {}
+                rows.append(
+                    {
+                        "race_id": race.race_id,
+                        "date": race.date.isoformat() if race.date else None,
+                        "venue": race.venue or race.place,
+                        "place": race.place or race.venue,
+                        "race_number": race.race_number,
+                        "race_time": race_result.get("race_time"),
+                        "participants": race_result.get("participants", []),
+                        "odds": race_result.get("odds", {}),
+                        "status": race_result.get("status", "unknown"),
+                    }
+                )
+        finally:
+            session.close()
+        return jsonify({
+            "date": now.strftime("%Y-%m-%d"),
+            "count": len(rows),
+            "races": rows,
+        })
+    except Exception as exc:
+        logger.error("Today races failed: %s", exc, exc_info=True)
+        return jsonify({"error": "レース情報の取得に失敗しました", "races": []}), 500
+
+
+@api_bp.route("/predictions/today", methods=["GET"])
+def get_today_predictions() -> Response:
+    """Return predictions for today's races based on live scraped data."""
+    try:
         from models.ensemble_model import EnsembleModel
+
+        now = datetime.now()
         model = EnsembleModel()
         predictions = model.predict_today()
-        return jsonify({
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "count": len(predictions),
-            "predictions": predictions,
-        })
+        message = None
+        if not predictions:
+            message = "本日の開催レースが取得できませんでした"
+        return jsonify(
+            {
+                "date": now.strftime("%Y-%m-%d"),
+                "count": len(predictions),
+                "predictions": predictions,
+                "message": message,
+            }
+        )
     except Exception as exc:
         logger.error("Today race predictions failed: %s", exc, exc_info=True)
         return jsonify({"error": "予測の取得に失敗しました", "predictions": []}), 500
@@ -362,7 +338,6 @@ def get_tomorrow_races() -> Response:
         JSON array of race predictions.
     """
     try:
-        from datetime import timedelta
         from models.ensemble_model import EnsembleModel
         model = EnsembleModel()
         predictions = model.predict_tomorrow()
