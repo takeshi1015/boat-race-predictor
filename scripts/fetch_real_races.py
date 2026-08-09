@@ -67,7 +67,7 @@ class BoatraceDataFetcher:
                         if venue_code in self.VENUES and venue_code not in active_venues:
                             active_venues.append(venue_code)
 
-            logger.info(f"📅 本日開催会場: {len(active_venues)}場")
+            logger.info(f"📅 開催会場: {len(active_venues)}場")
             if active_venues:
                 venue_names = [self.VENUES[code] for code in sorted(active_venues)]
                 logger.info(f"   {', '.join(venue_names)}")
@@ -94,7 +94,15 @@ class BoatraceDataFetcher:
         
         # 日本時間で現在時刻を取得（ナイーブな datetime オブジェクト）
         now_jst = datetime.now(JST).replace(tzinfo=None)
-        logger.info(f"⏰ 現在時刻（日本時間）: {now_jst.strftime('%H:%M:%S')}")
+        
+        if is_tomorrow:
+            # 翌日の場合：00:00 を基準に全レースを取得
+            cutoff_time = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            logger.info(f"⏰ 基準時刻: {cutoff_time.strftime('%H:%M:%S')} (翌日の全レースを取得)")
+        else:
+            # 当日の場合：現在時刻を基準に未開始レースのみ取得
+            cutoff_time = now_jst
+            logger.info(f"⏰ 現在時刻（日本時間）: {now_jst.strftime('%H:%M:%S')}")
 
         # 開催会場を取得
         active_venues = self.fetch_active_venues(target_date)
@@ -106,7 +114,7 @@ class BoatraceDataFetcher:
         for venue_code in active_venues:
             try:
                 venue_name = self.VENUES[venue_code]
-                venue_races = self._fetch_races_for_venue(target_date, venue_code, venue_name, now_jst, is_tomorrow)
+                venue_races = self._fetch_races_for_venue(target_date, venue_code, venue_name, cutoff_time, is_tomorrow)
                 races.extend(venue_races)
                 time.sleep(0.3)  # サーバー負荷軽減
             except Exception as e:
@@ -116,15 +124,15 @@ class BoatraceDataFetcher:
         logger.info(f"📊 {day_label}: 合計 {len(races)}件のレースを取得")
         return races
 
-    def _fetch_races_for_venue(self, target_date: datetime, venue_code: str, venue_name: str, now_jst: datetime, is_tomorrow: bool = False) -> list:
+    def _fetch_races_for_venue(self, target_date: datetime, venue_code: str, venue_name: str, cutoff_time: datetime, is_tomorrow: bool = False) -> list:
         """指定会場のレースデータを取得（終了したレースは除外）
         
         Args:
             target_date: 対象日付
             venue_code: 会場コード
             venue_name: 会場名
-            now_jst: 現在時刻（日本時間）
-            is_tomorrow: 翌日の場合True（この場合、全てのレースを取得）
+            cutoff_time: カットオフ時刻（当日は現在時刻、翌日は00:00）
+            is_tomorrow: 翌日の場合True
         """
         races = []
         date_str = target_date.strftime("%Y%m%d")
@@ -183,10 +191,9 @@ class BoatraceDataFetcher:
                         hour=hour, minute=minute, second=0, microsecond=0
                     )
 
-                    # ⭐️ 当日：現在時刻より後のレースのみ取得
-                    # ⭐️ 翌日：全てのレースを取得
-                    if not is_tomorrow and race_datetime <= now_jst:
-                        logger.debug(f"  スキップ（既終了）: {venue_name} {race_num}R ({hour:02d}:{minute:02d}) (現在時刻: {now_jst.strftime('%H:%M:%S')})")
+                    # ⭐️ カットオフ時刻より後のレースのみ取得
+                    if race_datetime <= cutoff_time:
+                        logger.debug(f"  スキップ（既終了）: {venue_name} {race_num}R ({hour:02d}:{minute:02d})")
                         continue
 
                     race_data = {
