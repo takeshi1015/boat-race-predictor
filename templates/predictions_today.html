@@ -119,7 +119,7 @@ function createRaceCard(pred, category) {
   const statusText = pred.status || (isPurchasable ? "購入可能" : "購入締切間近");
   
   const card = document.createElement("div");
-  card.className = "col-md-6 col-lg-4";
+  card.className = "race-card-column col-md-6 col-lg-4";
   
   const badgeBg = isClosingSoon ? "bg-danger" : (isHighConfidence ? "bg-success" : "bg-warning");
   const badgeText = isClosingSoon ? "【締切間近】" : (isHighConfidence ? "【購入推奨】" : "【穴狙い】");
@@ -204,7 +204,7 @@ async function loadPredictions() {
     // 購入可能なレース（80%以上）
     const highConf = predictions.filter(p => p.confidence >= 0.80 && p.is_purchasable);
     
-    // その他の購入可能レース（高信頼度と重複しない）
+    // 高信頼度以外も含めて、今購入できるレースを落とさず表示する
     const highOdds = predictions.filter(p => 
       p.confidence < 0.80 &&
       p.is_purchasable
@@ -290,9 +290,9 @@ setInterval(() => {
     }
 
     if (remaining <= 0) {
-      el.closest(".col-md-6")?.remove();
+      el.closest(".race-card-column")?.remove();
     } else if (remaining <= 300) {
-      const cardColumn = el.closest(".col-md-6");
+      const cardColumn = el.closest(".race-card-column");
       if (cardColumn && cardColumn.parentElement !== closingSoonContainer) {
         if (!closingSoonContainer.querySelector(".race-item")) {
           closingSoonContainer.innerHTML = "";

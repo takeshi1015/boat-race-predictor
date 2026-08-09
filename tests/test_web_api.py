@@ -2,7 +2,7 @@
 
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytest
 
 from app import create_app
@@ -114,6 +114,14 @@ def test_api_today_races_filters_past_and_sets_status(client, monkeypatch):
                     "date": (fixed_now + timedelta(minutes=20)).isoformat(),
                     "confidence": 0.88,
                 },
+                {
+                    "race_id": "aware-available-race",
+                    "race_number": 4,
+                    "date": (fixed_now + timedelta(minutes=35)).replace(
+                        tzinfo=timezone(timedelta(hours=9))
+                    ).isoformat(),
+                    "confidence": 0.61,
+                },
             ]
 
     monkeypatch.setattr(api_routes, "datetime", FixedDateTime)
@@ -124,11 +132,11 @@ def test_api_today_races_filters_past_and_sets_status(client, monkeypatch):
     data = json.loads(response.data)
 
     assert data["date"] == "2026-08-09"
-    assert data["count"] == 2
+    assert data["count"] == 3
 
     race_ids = [prediction["race_id"] for prediction in data["predictions"]]
     assert "past-race" not in race_ids
-    assert race_ids == ["closing-soon-race", "available-race"]
+    assert race_ids == ["closing-soon-race", "available-race", "aware-available-race"]
 
     statuses = {prediction["race_id"]: prediction for prediction in data["predictions"]}
     assert statuses["closing-soon-race"]["status"] == "購入締切間近"
@@ -137,6 +145,9 @@ def test_api_today_races_filters_past_and_sets_status(client, monkeypatch):
     assert statuses["available-race"]["status"] == "購入可能"
     assert statuses["available-race"]["is_closing_soon"] is False
     assert statuses["available-race"]["is_purchasable"] is True
+    assert statuses["aware-available-race"]["status"] == "購入可能"
+    assert statuses["aware-available-race"]["is_closing_soon"] is False
+    assert statuses["aware-available-race"]["is_purchasable"] is True
 
 
 def test_export_json(client):

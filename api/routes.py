@@ -376,10 +376,17 @@ def _parse_prediction_race_datetime(prediction: Dict[str, Any]) -> datetime | No
 def _enrich_today_prediction(prediction: Dict[str, Any], now: datetime) -> Dict[str, Any] | None:
     """Add purchase status metadata and remove races that already started."""
     race_datetime = _parse_prediction_race_datetime(prediction)
-    if race_datetime is None or race_datetime <= now:
+    if race_datetime is None:
         return None
 
-    seconds_until_race = int((race_datetime - now).total_seconds())
+    comparison_now = now
+    if race_datetime.tzinfo is not None and race_datetime.utcoffset() is not None:
+        comparison_now = now.replace(tzinfo=race_datetime.tzinfo)
+
+    if race_datetime <= comparison_now:
+        return None
+
+    seconds_until_race = int((race_datetime - comparison_now).total_seconds())
     is_closing_soon = seconds_until_race <= RACE_TICKET_CUTOFF_MINUTES * 60
 
     enriched = dict(prediction)
