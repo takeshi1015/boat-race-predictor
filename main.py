@@ -211,7 +211,7 @@ def _show_usage() -> None:
     print("     → http://localhost:5000/ でアクセス")
     print()
     print("【初回セットアップ】")
-    print("  python scripts/init_test_data.py")
+    print("  起動時に自動的にレースデータを取得します。")
     print()
     print("【説明】")
     print("  - 信頼度 0.7 以上が購入可能な予想です")

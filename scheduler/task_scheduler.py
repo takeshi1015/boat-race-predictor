@@ -38,7 +38,6 @@ def _display_predictions(predictions: list, title: str, target_date: datetime = 
 
     if not predictions:
         print("  予測データがありません。")
-        print("  python scripts/init_test_data.py でテストデータを追加してください。")
         print()
         return
 
@@ -120,7 +119,13 @@ class TaskScheduler:
         logger.info("=" * 60)
         logger.info("当日予測タスクを開始")
         try:
+            # Step 1: boatrace.jp から当日レースデータを取得してDBに保存
+            from scraper.live_fetcher import fetch_and_save_races
             today = datetime.now()
+            fetched = fetch_and_save_races(today)
+            logger.info(f"当日レースデータ取得・保存: {fetched}件")
+
+            # Step 2: DBのデータを使って予測
             predictions = self._get_model().predict_today()
             logger.info(f"当日予測完了: {len(predictions)}レース")
 
@@ -142,6 +147,13 @@ class TaskScheduler:
         logger.info("翌日予測タスクを開始")
         try:
             tomorrow = datetime.now() + timedelta(days=1)
+
+            # Step 1: boatrace.jp から翌日レースデータを取得してDBに保存
+            from scraper.live_fetcher import fetch_and_save_races
+            fetched = fetch_and_save_races(tomorrow)
+            logger.info(f"翌日レースデータ取得・保存: {fetched}件")
+
+            # Step 2: DBのデータを使って予測
             predictions = self._get_model().predict_tomorrow()
             logger.info(f"翌日予測完了: {len(predictions)}レース")
 
@@ -244,6 +256,16 @@ class TaskScheduler:
     # Scheduled tasks (continuous mode)
     # ------------------------------------------------------------------
 
+    def _run_fetch_races(self):
+        """boatrace.jp からレースデータを取得してDBに保存（スケジューラー定期実行）"""
+        logger.info("レースデータ定期取得タスクを開始")
+        try:
+            from scraper.live_fetcher import fetch_and_save_races
+            fetched = fetch_and_save_races(datetime.now())
+            logger.info(f"レースデータ定期取得完了: {fetched}件")
+        except Exception as e:
+            logger.error(f"レースデータ定期取得エラー: {e}", exc_info=True)
+
     def _schedule_tasks(self):
         """定期タスクをスケジュール"""
         today_time = config.SCHEDULE_TODAY
@@ -251,6 +273,16 @@ class TaskScheduler:
         eval_time = config.SCHEDULE_EVALUATE
 
         from apscheduler.triggers.cron import CronTrigger
+        from apscheduler.triggers.interval import IntervalTrigger
+
+        # 2時間ごとにレースデータを自動取得
+        self._scheduler.add_job(
+            self._run_fetch_races,
+            IntervalTrigger(hours=2),
+            id="fetch_races",
+            name="レースデータ取得タスク",
+            replace_existing=True,
+        )
 
         today_h, today_m = self._parse_time(today_time)
         self._scheduler.add_job(

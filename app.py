@@ -84,6 +84,28 @@ def create_app() -> Flask:
         logger.error("Internal server error: %s", error)
         return render_template("base.html"), 500
 
+    # -----------------------------------------------------------------------
+    # Fetch today's race data in a background thread on startup
+    # -----------------------------------------------------------------------
+
+    def _startup_fetch():
+        """起動時に当日レースデータをboatrace.jpから取得してDBに保存する"""
+        import threading
+        from datetime import datetime as _dt
+
+        def _fetch():
+            try:
+                from scraper.live_fetcher import fetch_and_save_races
+                fetched = fetch_and_save_races(_dt.now())
+                logger.info(f"起動時レースデータ取得完了: {fetched}件")
+            except Exception as exc:
+                logger.warning(f"起動時レースデータ取得エラー: {exc}")
+
+        t = threading.Thread(target=_fetch, daemon=True, name="startup-race-fetch")
+        t.start()
+
+    _startup_fetch()
+
     return app
 
 
