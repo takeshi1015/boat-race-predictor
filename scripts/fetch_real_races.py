@@ -252,7 +252,10 @@ def fetch_and_store_races(target_date: datetime = None) -> int:
 
 
 def refresh_upcoming_races(base_date: datetime = None, days: int = 2) -> Dict[str, int]:
-    """当日以降のレースデータをまとめて更新"""
+    """当日以降のレースデータをまとめて更新
+
+    days が 1 未満でも、最低 1 日分（当日分）を更新する。
+    """
     if base_date is None:
         base_date = datetime.now()
 
@@ -273,17 +276,24 @@ def ensure_race_data(target_date: datetime = None) -> List[Race]:
     db = get_db_manager()
     session = db.get_session()
     try:
-        races = db.get_races_by_date(session, target_date)
+        races = list(db.get_races_by_date(session, target_date))
         if races:
-            return list(races)
+            session.expunge_all()
+            return races
     finally:
         session.close()
 
-    fetch_and_store_races(target_date)
+    try:
+        fetch_and_store_races(target_date)
+    except Exception as e:
+        logger.error(f"レースデータ自動取得エラー: {e}", exc_info=True)
+        return []
 
     session = db.get_session()
     try:
-        return list(db.get_races_by_date(session, target_date))
+        races = list(db.get_races_by_date(session, target_date))
+        session.expunge_all()
+        return races
     finally:
         session.close()
 

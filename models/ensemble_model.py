@@ -142,20 +142,20 @@ class EnsembleModel:
         self.venue_manager = VenueManager()
         logger.info("アンサンブルモデルを初期化")
 
-    def predict_today(self):
+    def predict_today(self, target_date: datetime = None):
         """当日の予測を実行"""
         logger.info("当日予測を開始")
-        return self._predict_for_period("today")
+        return self._predict_for_period("today", target_date=target_date)
 
-    def predict_tomorrow(self):
+    def predict_tomorrow(self, target_date: datetime = None):
         """翌日の予測を実行"""
         logger.info("翌日予測を開始")
-        return self._predict_for_period("tomorrow")
+        return self._predict_for_period("tomorrow", target_date=target_date)
 
-    def _predict_for_period(self, period: str) -> list:
+    def _predict_for_period(self, period: str, target_date: datetime = None) -> list:
         """指定期間のレースを予測"""
         try:
-            races = self._get_race_data(period)
+            races = self._get_race_data(period, target_date=target_date)
             logger.info(f"{period}のレースデータ取得: {len(races)}件")
             if not races:
                 logger.warning(f"{period}のレースデータがありません")
@@ -262,14 +262,15 @@ class EnsembleModel:
             logger.error(f"レース予測エラー: {e}")
             return None
 
-    def _get_race_data(self, period: str) -> list:
+    def _get_race_data(self, period: str, target_date: datetime = None) -> list:
         """データベースからレースデータを取得"""
         try:
             from scripts.fetch_real_races import ensure_race_data
-            if period == "today":
-                target_date = datetime.now()
-            else:
-                target_date = datetime.now() + timedelta(days=1)
+            if target_date is None:
+                if period == "today":
+                    target_date = datetime.now()
+                else:
+                    target_date = datetime.now() + timedelta(days=1)
             return ensure_race_data(target_date)
         except Exception as e:
             logger.error(f"レースデータ取得エラー: {e}")

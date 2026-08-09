@@ -6,6 +6,7 @@ All endpoints are registered on the ``api`` Blueprint defined in
 """
 
 import json
+import threading
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
@@ -66,6 +67,9 @@ MODEL_INFO: Dict[str, Dict[str, Any]] = {
         "type": "ensemble",
     },
 }
+
+_ENSEMBLE_MODEL = None
+_ENSEMBLE_MODEL_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Minimal sample race data used when no race data has been persisted yet
@@ -173,11 +177,23 @@ def _get_target_date(period: str) -> datetime:
     return datetime.now() if period == "today" else datetime.now() + timedelta(days=1)
 
 
-def _get_period_predictions(period: str) -> list:
-    from models.ensemble_model import EnsembleModel
+def _get_ensemble_model():
+    global _ENSEMBLE_MODEL
+    if _ENSEMBLE_MODEL is None:
+        with _ENSEMBLE_MODEL_LOCK:
+            if _ENSEMBLE_MODEL is None:
+                from models.ensemble_model import EnsembleModel
+                _ENSEMBLE_MODEL = EnsembleModel()
+    return _ENSEMBLE_MODEL
 
-    model = EnsembleModel()
-    return model.predict_today() if period == "today" else model.predict_tomorrow()
+
+def _get_period_predictions(period: str, target_date: datetime = None) -> list:
+    model = _get_ensemble_model()
+    return (
+        model.predict_today(target_date=target_date)
+        if period == "today"
+        else model.predict_tomorrow(target_date=target_date)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -373,9 +389,10 @@ def get_today_races() -> Response:
     try:
         from scripts.fetch_real_races import ensure_race_data
 
-        races = ensure_race_data(_get_target_date("today"))
+        target_date = _get_target_date("today")
+        races = ensure_race_data(target_date)
         return jsonify({
-            "date": datetime.now().strftime("%Y-%m-%d"),
+            "date": target_date.strftime("%Y-%m-%d"),
             "count": len(races),
             "races": [_serialize_race(race) for race in races],
         })
@@ -397,8 +414,8 @@ def get_tomorrow_races() -> Response:
     try:
         from scripts.fetch_real_races import ensure_race_data
 
-        tomorrow = datetime.now() + timedelta(days=1)
-        races = ensure_race_data(_get_target_date("tomorrow"))
+        tomorrow = _get_target_date("tomorrow")
+        races = ensure_race_data(tomorrow)
         return jsonify({
             "date": tomorrow.strftime("%Y-%m-%d"),
             "count": len(races),
@@ -413,9 +430,10 @@ def get_tomorrow_races() -> Response:
 def get_today_predictions() -> Response:
     """Return today's predictions based on persisted race data."""
     try:
-        predictions = _get_period_predictions("today")
+        target_date = _get_target_date("today")
+        predictions = _get_period_predictions("today", target_date=target_date)
         return jsonify({
-            "date": datetime.now().strftime("%Y-%m-%d"),
+            "date": target_date.strftime("%Y-%m-%d"),
             "count": len(predictions),
             "predictions": predictions,
         })
@@ -428,8 +446,8 @@ def get_today_predictions() -> Response:
 def get_tomorrow_predictions() -> Response:
     """Return tomorrow's predictions based on persisted race data."""
     try:
-        predictions = _get_period_predictions("tomorrow")
-        tomorrow = datetime.now() + timedelta(days=1)
+        tomorrow = _get_target_date("tomorrow")
+        predictions = _get_period_predictions("tomorrow", target_date=tomorrow)
         return jsonify({
             "date": tomorrow.strftime("%Y-%m-%d"),
             "count": len(predictions),
