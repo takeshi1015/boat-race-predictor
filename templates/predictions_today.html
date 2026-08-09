@@ -20,7 +20,7 @@
   <div class="col-md-6">
     <div class="alert alert-info">
       <strong>📊 統計情報</strong><br>
-      購入可能: <span id="available-count">-</span>件 | 終了: <span id="expired-count">-</span>件
+      購入可能: <span id="available-count">-</span>件 | 購入締切間近: <span id="closing-soon-count">-</span>件
     </div>
   </div>
 </div>
@@ -38,10 +38,10 @@
   </div>
 </div>
 
-<!-- 穴狙い予想（50-70%）-->
+<!-- その他の購入可能レース -->
 <div class="mb-5">
   <h3 class="fw-bold text-warning mb-3">
-    <i class="bi bi-bullseye me-2"></i>💰 穴確率が高い予想 - 配当狙い
+    <i class="bi bi-ticket-perforated me-2"></i>🎫 その他の購入可能レース
   </h3>
   <div id="high-odds-cards" class="row g-3">
     <div class="col-12 text-center py-5 text-muted">
@@ -51,14 +51,14 @@
   </div>
 </div>
 
-<!-- 終了したレース（結果確認用）-->
+<!-- 購入締切間近 -->
 <div class="mb-5">
-  <h3 class="fw-bold text-secondary mb-3">
-    <i class="bi bi-clock-history me-2"></i>📋 過去レース結果
+  <h3 class="fw-bold text-danger mb-3">
+    <i class="bi bi-alarm me-2"></i>⏳ 購入締切間近
   </h3>
-  <div id="expired-cards" class="row g-3">
+  <div id="closing-soon-cards" class="row g-3">
     <div class="col-12 text-center py-3 text-muted">
-      <p class="mb-0">終了したレースはありません</p>
+      <p class="mb-0">購入締切間近のレースはありません</p>
     </div>
   </div>
 </div>
@@ -84,26 +84,27 @@ function createRaceCard(pred, category) {
   const conf = pred.confidence || 0;
   const confPct = (conf * 100).toFixed(1);
   const isHighConfidence = category === "high_confidence";
+  const isClosingSoon = category === "closing_soon";
   
   const raceTime = pred.race_time || "?";
   const deadline = pred.purchase_deadline || "?";
-  const deadlineIso = pred.purchase_deadline_iso || "";
-  const timeRemaining = pred.time_remaining || 0;
+  const raceDateTimeIso = pred.date || "";
+  const secondsUntilRace = pred.seconds_until_race || 0;
   const isPurchasable = pred.is_purchasable;
+  const statusText = pred.status || (isPurchasable ? "購入可能" : "購入締切間近");
   
   const card = document.createElement("div");
   card.className = "col-md-6 col-lg-4";
   
-  const badgeBg = isHighConfidence ? "bg-success" : "bg-warning";
-  const badgeText = isHighConfidence ? "【購入推奨】" : "【穴狙い】";
-  const headerBg = isHighConfidence ? "#e8f5e9" : "#fff3e0";
+  const badgeBg = isClosingSoon ? "bg-danger" : (isHighConfidence ? "bg-success" : "bg-warning");
+  const badgeText = isClosingSoon ? "【締切間近】" : (isHighConfidence ? "【購入推奨】" : "【穴狙い】");
+  const headerBg = isClosingSoon ? "#ffebee" : (isHighConfidence ? "#e8f5e9" : "#fff3e0");
   
-  const statusColor = isPurchasable ? "#4CAF50" : "#999";
-  const statusText = isPurchasable ? "購入可能" : "購入終了";
+  const statusColor = isPurchasable ? "#4CAF50" : "#d32f2f";
   
   card.innerHTML = `
-    <div class="card shadow-sm h-100 race-item ${isPurchasable ? 'available' : 'expired'}" 
-         data-deadline="${deadlineIso}">
+    <div class="card shadow-sm h-100 race-item ${isPurchasable ? 'available' : 'closing-soon'}" 
+         data-race-time="${raceDateTimeIso}">
       <div class="card-header d-flex justify-content-between align-items-center" style="background-color: ${headerBg}">
         <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
         <span class="badge bg-secondary">${pred.race_number}レース</span>
@@ -118,8 +119,8 @@ function createRaceCard(pred, category) {
             <i class="bi bi-x-circle text-danger"></i> 🚫 購入制限: <strong style="color: #000;">${deadline}</strong>
           </div>
           <div style="color: ${statusColor}; font-weight: bold; margin-top: 4px;">
-            ${statusText} 
-            <span class="time-remaining">${isPurchasable ? formatTimeRemaining(timeRemaining) : "終了"}</span>
+            <span class="status-text">${statusText}</span>
+            <span class="time-remaining">${formatTimeRemaining(secondsUntilRace)}</span>
           </div>
         </div>
         
@@ -157,65 +158,14 @@ function createRaceCard(pred, category) {
   
   return card;
 }
-
-function createExpiredRaceCard(pred) {
-  const order = (pred.predicted_order || []).join("-") || "-";
-  const conf = pred.confidence || 0;
-  const confPct = (conf * 100).toFixed(1);
-  
-  const raceTime = pred.race_time || "?";
-  const deadline = pred.purchase_deadline || "?";
-  
-  const card = document.createElement("div");
-  card.className = "col-md-6 col-lg-4";
-  
-  card.innerHTML = `
-    <div class="card shadow-sm h-100 expired-result">
-      <div class="card-header d-flex justify-content-between align-items-center" style="background-color: #f5f5f5">
-        <span class="fw-bold"><i class="bi bi-water me-1"></i>${pred.place || pred.venue || "不明"}競艇場</span>
-        <span class="badge bg-secondary">${pred.race_number}レース</span>
-      </div>
-      <div class="card-body">
-        <!-- レース時刻 -->
-        <div class="race-time mb-3" style="font-size: 13px; line-height: 1.8;">
-          <div style="color: #666;">
-            <i class="bi bi-clock text-info"></i> ⏰ レース時刻: <strong style="color: #000;">${raceTime}</strong>
-          </div>
-          <div style="color: #999;">購入制限: ${deadline}（終了）</div>
-        </div>
-        
-        <!-- 予想した買い目 -->
-        <div class="text-center mb-3">
-          <span class="display-6 fw-bold text-secondary">${order}</span>
-          <p class="text-muted small mb-0">予想した買い目</p>
-        </div>
-        
-        <!-- 信頼度 -->
-        <div class="d-flex align-items-center gap-2 mb-2">
-          <span class="text-muted small">信頼度:</span>
-          <span class="text-warning">${starsHtml(conf)}</span>
-          <span class="fw-bold">${confPct}%</span>
-        </div>
-        
-        <!-- 結果（学習用） -->
-        <div class="alert alert-secondary small mb-0" style="font-size: 12px;">
-          <i class="bi bi-info-circle me-1"></i>
-          このレースは既に終了しました。実績から学習していません。
-        </div>
-      </div>
-    </div>`;
-  
-  return card;
-}
-
 async function loadPredictions() {
   const highConfContainer = document.getElementById("high-confidence-cards");
   const highOddsContainer = document.getElementById("high-odds-cards");
-  const expiredContainer = document.getElementById("expired-cards");
+  const closingSoonContainer = document.getElementById("closing-soon-cards");
   
   highConfContainer.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
   highOddsContainer.innerHTML = `<div class="col-12 text-center py-5 text-muted"><div class="spinner-border"></div><p class="mt-2">読み込み中…</p></div>`;
-  expiredContainer.innerHTML = `<div class="col-12 text-center py-3 text-muted"><p class="mb-0">読み込み中…</p></div>`;
+  closingSoonContainer.innerHTML = `<div class="col-12 text-center py-3 text-muted"><p class="mb-0">読み込み中…</p></div>`;
 
   try {
     const res = await fetch("/api/races/today");
@@ -229,26 +179,22 @@ async function loadPredictions() {
     // 購入可能なレース（80%以上）
     const highConf = predictions.filter(p => p.confidence >= 0.80 && p.is_purchasable);
     
-    // 購入可能な穴狙い（50-70%、高信頼度と重複なし）
-    const usedVenues = new Set(highConf.map(p => p.place || p.venue));
+    // その他の購入可能レース（高信頼度と重複しない）
     const highOdds = predictions.filter(p => 
-      p.confidence >= 0.50 && 
       p.confidence < 0.80 &&
-      p.is_purchasable &&
-      !(usedVenues.has(p.place || p.venue))
+      p.is_purchasable
     );
     
-    // 終了したレース（学習用）
-    const expired = predictions.filter(p => !p.is_purchasable);
+    const closingSoon = predictions.filter(p => p.is_closing_soon);
     
     // 統計情報を更新
     document.getElementById("available-count").textContent = highConf.length + highOdds.length;
-    document.getElementById("expired-count").textContent = expired.length;
+    document.getElementById("closing-soon-count").textContent = closingSoon.length;
 
-    if (highConf.length === 0 && highOdds.length === 0 && expired.length === 0) {
+    if (highConf.length === 0 && highOdds.length === 0 && closingSoon.length === 0) {
       highConfContainer.innerHTML = `<div class="col-12"><div class="alert alert-warning">当日のレースデータがありません</div></div>`;
       highOddsContainer.innerHTML = "";
-      expiredContainer.innerHTML = "";
+      closingSoonContainer.innerHTML = "";
       return;
     }
 
@@ -264,7 +210,7 @@ async function loadPredictions() {
 
     // 穴狙いを表示
     if (highOdds.length === 0) {
-      highOddsContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">購入可能な穴狙い予想がありません</div></div>`;
+      highOddsContainer.innerHTML = `<div class="col-12"><div class="alert alert-info">その他の購入可能レースはありません</div></div>`;
     } else {
       highOddsContainer.innerHTML = "";
       highOdds.forEach(pred => {
@@ -272,13 +218,12 @@ async function loadPredictions() {
       });
     }
 
-    // 終了したレースを表示（学習用）
-    if (expired.length === 0) {
-      expiredContainer.innerHTML = `<div class="col-12 text-center py-3 text-muted"><p class="mb-0">終了したレースはありません</p></div>`;
+    if (closingSoon.length === 0) {
+      closingSoonContainer.innerHTML = `<div class="col-12 text-center py-3 text-muted"><p class="mb-0">購入締切間近のレースはありません</p></div>`;
     } else {
-      expiredContainer.innerHTML = "";
-      expired.forEach(pred => {
-        expiredContainer.appendChild(createExpiredRaceCard(pred));
+      closingSoonContainer.innerHTML = "";
+      closingSoon.forEach(pred => {
+        closingSoonContainer.appendChild(createRaceCard(pred, "closing_soon"));
       });
     }
 
@@ -290,30 +235,42 @@ async function loadPredictions() {
 
 // リアルタイムカウントダウン
 setInterval(() => {
-  document.querySelectorAll(".race-item[data-deadline]").forEach((el) => {
-    const deadline = el.dataset.deadline;
-    if (!deadline) return;
+  document.querySelectorAll(".race-item[data-race-time]").forEach((el) => {
+    const raceTime = el.dataset.raceTime;
+    if (!raceTime) return;
 
     const now = new Date();
-    const remaining = Math.max(0, (new Date(deadline) - now) / 1000);
+    const remaining = Math.max(0, (new Date(raceTime) - now) / 1000);
 
     // 残り時間テキストを更新
     const timeEl = el.querySelector(".time-remaining");
     if (timeEl) {
       if (remaining <= 0) {
-        timeEl.textContent = "終了";
+        timeEl.textContent = "開始";
       } else {
         timeEl.textContent = formatTimeRemaining(remaining);
       }
     }
 
-    // 状態クラスを更新
+    const statusEl = el.querySelector(".status-text");
+    if (statusEl) {
+      if (remaining <= 0) {
+        statusEl.textContent = "終了";
+      } else if (remaining <= 300) {
+        statusEl.textContent = "購入締切間近";
+      } else {
+        statusEl.textContent = "購入可能";
+      }
+    }
+
     if (remaining <= 0) {
-      el.classList.add("expired");
+      el.closest(".col-md-6")?.remove();
+    } else if (remaining <= 300) {
+      el.classList.add("closing-soon");
       el.classList.remove("available");
     } else {
       el.classList.add("available");
-      el.classList.remove("expired");
+      el.classList.remove("closing-soon");
     }
   });
 }, 1000);
